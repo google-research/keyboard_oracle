@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+// A suffix trie constructed using a list of input words. The purpose of the
+// this trie is to predict, given a context, what is most likely to come next.
+message SuffixTrie {
+
+  // The nodes that make up a suffix trie.
+  // Next available ID: 5
+  message TrieNode {
+    // The aksara (grapheme cluster) the node contains.
+    string text = 1;
+    int64 frequency = 2;
+    bool is_leaf = 3;
+    repeated TrieNode children = 4;
+  }
+
+  TrieNode root_node = 1;
+}
