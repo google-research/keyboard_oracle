@@ -4,15 +4,18 @@ A dynamic keyboard made using [Flutter](https://flutter.dev/).
 
 A dynamic grid made up of buttons which functions as a keyboard. This keyboard changes
 dynamically depending on the input to display the most likely aksaras (grapheme clusters)
-to come next. The keyboard is separated by columns to display predictions of different lengths.
+to come next. The keyboard displays predictions of lengths 1-4.
+
+![Malayalam initial keyboard](images/mlym_initial.png)
+![Malayalam keyboard after user input](images/mlym_with_input.png)
 
 ## Setting up Flutter and Dart:
-Install Flutter: Instructions here: https://flutter.dev/docs/get-started/install
+Install Flutter: Instructions are here: https://flutter.dev/docs/get-started/install
 
-In Summary:
+In summary:
 
-1. Extract the file found in the link above to your desired location, e.g. *$USER/$FOLDER*
-2. Add Flutter to your path (e.g. by typing `export PATH="$PATH:`pwd`/flutter/bin"` into the Linux command line).
+1. Extract the file found in the link above to your desired location, e.g. `${USER}/${FOLDER}`.
+2. Add Flutter to your path (e.g. by typing `export PATH="${PATH}:${PWD}/flutter/bin"` into the Linux command line).
 3. To add Flutter to your path permanently, see instructions in the link above.
 4. Type `flutter doctor` into the command line to make sure everything has been installed smoothly.
 
@@ -20,9 +23,11 @@ Flutter comes with a Dart SDK so you do not need a separate download for this.
 
 ## Setting up an IDE:
 Flutter projects can be worked on in your IDE of choice. Flutter does, however,
-require an installation of Android Studio to supply its Android platform dependencies.
-On the other hand, the pure Dart package we use cannot be created in Android Studio.
-Therefore, instructions for setting up both Android Studio and Visual Studio Code are given below.
+requires an installation of [Android
+Studio](https://developer.android.com/studio) to supply its Android platform
+dependencies.  On the other hand, the pure Dart package we use cannot be created
+in Android Studio.  Therefore, instructions for setting up both Android Studio
+and Visual Studio Code are given below.
 
 ###### Android Studio:
 1. Download and install from here: https://developer.android.com/studio
@@ -31,7 +36,7 @@ Therefore, instructions for setting up both Android Studio and Visual Studio Cod
 
 ###### Visual Studio Code:
 1. Install VS Code from here: https://code.visualstudio.com/
-2. Start VS Code and install the Dart and Flutter plugins by going to *View > Command Palette* (or Ctrl + Shift + P)
+2. Start VS Code and install the Dart and Flutter plugins by going to *View > Command Palette* (or Ctrl + Shift + P).
 3. Type *install*, and then select *Extensions: Install Extensions*.
 4. Type *Flutter* and click install. This installs both the Dart and Flutter plugins.
 
@@ -42,8 +47,8 @@ Instructions can be found here for Android: https://flutter.dev/docs/get-started
 1. Go to *View > Command Palette* in VS Code and choose *Dart: New Project*.
 2. Select *Console Application* (console-full) and name your project trie_constructor.
 3. Take note of where you store the project directory.
-4. Overwrite *lib* and *bin* with the *lib* and *bin* files in */trie_constructor* in this repository.
-5. Make sure your *pubspec.yaml* contains the same dependencies as the *pubspec.yaml* file in */trie_constructor* in this repository.
+4. Overwrite *lib* and *bin* with the *lib* and *bin* files in *trie_constructor* directory in this repository.
+5. Make sure your *pubspec.yaml* contains the same dependencies as the *pubspec.yaml* file in *trie_constructor* directory in this repository.
 6. Run `pub get` in your terminal.
 
 ## Setting up the Protocol Buffer compiler and Dart plugin
@@ -70,5 +75,3 @@ Instructions can be found here for Android: https://flutter.dev/docs/get-started
 4. For input files, the script needs text files containing words where each word is separated by aksara and followed by its frequency in the form of: *[Aksara1][space symbol][Aksara2][space symbol][Aksara3][tab symbol][frequency no.]* .
 5. If you would like to run tests on your language model, use the command line flag *isTest*. E.g. `dart trie_constructor.dart --isTest` . The results will be printed to your console.
 6. You can now copy the generated bin file from *trie_constructor/bin* and paste them into the *assets* folder in your flutter app to use.
-
-

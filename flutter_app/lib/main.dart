@@ -61,15 +61,15 @@ class _MyHomePageState extends State<MyHomePage> {
   bool doneLoading = false;
 
   // The size of the text displayed and the text on the buttons.
-  double fontSize = 16.0;
+  double fontSize = 17.0;
 
   Widget staticKeys;
 
-  static const maxFontSize = 18.0;
+  static const maxFontSize = 20.0;
 
   static const minNumOfPredictions = 30;
 
-  int maxNumOfPredictions = 140;
+  int maxNumOfPredictions = 120;
 
   // The number of predictions displayed when the app starts up.
   int numOfPredictions = 60;
@@ -98,20 +98,12 @@ class _MyHomePageState extends State<MyHomePage> {
   void initialiseKeyboard() async {
     // Depending on the language, the max number of predictions is different
     // due to the scripts taking up different amounts of room on the screen.
-    if (language == 'mlym') {
-      maxNumOfPredictions = 100;
-    } else {
-      maxNumOfPredictions = 140;
-    }
-    if (numOfPredictions > maxNumOfPredictions) {
-      numOfPredictions = maxNumOfPredictions;
-    }
+    setMaxNumOfPredictions();
     if (storedKeyboards[language] != null) {
       setState(() {
         keyboard = storedKeyboards[language];
         keyboard.setNumOfPredictions(numOfPredictions);
         keyboard.fillKeyboard();
-        _predictionController.text = numOfPredictions.toString();
         staticKeys = loadStaticKeys();
         doneLoading = true;
       });
@@ -120,12 +112,34 @@ class _MyHomePageState extends State<MyHomePage> {
         setState(() {
           var protoBytes = data.buffer.asUint8List();
           keyboard = DynamicKeyboard(protoBytes, numOfPredictions);
-          _predictionController.text = numOfPredictions.toString();
           staticKeys = loadStaticKeys();
           doneLoading = true;
           storedKeyboards[language] = keyboard;
         });
       });
+    }
+  }
+
+  void setMaxNumOfPredictions() {
+    // The maximum number of predictions able to fit on the screen when the
+    // font size is at its maximum value. These maximum number values are
+    // taken from experiments using the Google Pixel.
+    if (language == 'mlym') {
+      maxNumOfPredictions = 70;
+    } else {
+      maxNumOfPredictions = 110;
+    }
+    // For each decrement  by 1 of the font size, there is room for approx.
+    // 10 more predictions to be displayed.
+    var fontSizeDiff = maxFontSize - fontSize;
+    maxNumOfPredictions += (10 * fontSizeDiff).floor();
+    // If the previous number of predictions is too much for the screen with
+    // the current font size, a smaller set of predictions are generated.
+    if (numOfPredictions > maxNumOfPredictions) {
+      numOfPredictions = maxNumOfPredictions;
+      keyboard.setNumOfPredictions(numOfPredictions);
+      keyboard.fillKeyboard();
+      _predictionController.text = numOfPredictions.toString();
     }
   }
 
@@ -207,6 +221,7 @@ class _MyHomePageState extends State<MyHomePage> {
                           _fontController.text = sizeInput.toString();
                           FocusScope.of(context).unfocus();
                           fontSize = sizeInput;
+                          setMaxNumOfPredictions();
                         });
                       },
                     ))),
