@@ -63,9 +63,6 @@ class DynamicKeyboard {
   // pattern or grapheme cluster, it needs to be handled differently.
   bool _inputIsCharacter = false;
 
-  // Inputs that should be treated differently to regular letters/characters.
-  final List<String> _specialSymbols = [' ', '⏎', '←'];
-
   // The language model used to predict what should be displayed on the
   // keyboard.
   SuffixTrie _trie;
@@ -126,18 +123,15 @@ class DynamicKeyboard {
   // context/context-change.
   void dynamicallyChangeButtons() {
     keys = <List<String>>[];
-    var patterns = <List<String>>[];
-    // 10 predictions of lengths 4, 3, and 2 are always generated.
-    var groups = {4: 10, 3: 10, 2: 10};
-    // If the user has requested more than the minimum number of predictions,
-    // single aksara predictions are also generated.
-    if (_numOfPredictions > 30) {
-      groups[1] = _numOfPredictions - 30;
-    }
-    // For each group (sequences of length 1-4), find most likely patterns.
-    for (var group in groups.keys) {
-      patterns = _trie.findPredictedPatterns(contextWord, groups[group], group);
-      fillKeysWithPatterns(patterns, groups[group]);
+    var patterns =
+        _trie.getMostLikelyPredictions(contextWord, _numOfPredictions);
+    // Sets the keyboard keys to be the most likely predictions found.
+    for (var i = 0; i < _numOfPredictions; i++) {
+      if (patterns.length > i) {
+        keys.add(patterns[i]);
+      } else {
+        keys.add([]);
+      }
     }
     setCharPredictions();
   }
@@ -146,128 +140,116 @@ class DynamicKeyboard {
   // could come immediately afterwards.
   void setCharPredictions() {
     var lastChar = contextWord.last[contextWord.last.length - 1];
-    if (_inputIsCharacter) {
-      lastChar = contextWord.last.substring(0, contextWord.last.length - 2);
-    }
     charPredictions = _charNeighbours[lastChar];
     if (charPredictions != null) {
       charPredictions.sort();
     }
   }
 
-  // Sets the keyboard keys (list) to be the grapheme clusters from
-  // the found patterns.
-  void fillKeysWithPatterns(List<List<String>> patterns, int numPatsNeeded) {
-    // Do for each pattern.
-    for (var row = 0; row < numPatsNeeded; row++) {
-      List<String> pattern;
-      if (patterns.length > row) {
-        pattern = patterns[row];
-        keys.add(pattern);
-      } else {
-        keys.add([]);
-      }
-    }
-  }
-
-  // The text value displayed on the screen and the current context are changed
-  // depending on what the input is.
-  void processNewInput(List<String> input) {
+  // The text value displayed on the screen is modified according to the input.
+  void processNewInput(List<String> input, int endOfList) {
     // If the input is not a letter (i.e. if it is a symbol or number).
-    if (input.length == 1 && _specialSymbols.contains(input.first)) {
-      var curr = input.first;
-      if (curr == '←') {
-        processBackSpace();
-      } else {
-        // Resets context.
-        contextWord = [wordStartingSymbol];
-        if (curr == '⏎') {
-          displayedText.add('\n');
-        } else {
-          displayedText.add(curr);
-        }
-      }
+    if (input.length == 1 && input.first == '←') {
+      processBackSpace(endOfList);
     } else {
       // If the most recent input before this input was a character, we check
-      // if it can be combined with the beginning of this input. Otherwise, it
-      // is a grapheme cluster of its own.
+      // if it can be combined with the the first aksara of this input.
+      // Otherwise, it is a grapheme cluster of its own.
       if (_inputIsCharacter) {
-        var canBeCombined = false;
-        var lastAksara = contextWord.last[0];
-        var combination = lastAksara + input.first;
-        for (var aksara in _trie.allAksaras) {
-          if (combination == aksara) {
-            canBeCombined = true;
-            break;
+        var selectedText = displayedText.sublist(0, endOfList);
+        if (selectedText.isNotEmpty) {
+          var combination = selectedText.last + input.first;
+          var canBeCombined = isValidAksara(combination);
+          if (canBeCombined) {
+            displayedText = selectedText.sublist(0, selectedText.length - 1) +
+                [combination] +
+                displayedText.sublist(endOfList);
+            input = input.sublist(1);
           }
-        }
-        if (canBeCombined) {
-          contextWord.last = combination;
-          displayedText.last = combination;
-          input = input.sublist(1);
-        } else {
-          contextWord.last = lastAksara;
         }
       }
       if (input.isNotEmpty) {
-        contextWord += input;
-        displayedText += input;
+        var newPart = displayedText.sublist(0, endOfList) + input;
+        displayedText = newPart + displayedText.sublist(endOfList);
       }
     }
     _inputIsCharacter = false;
+    setContextWord();
   }
 
-  // Updates the current context/text & removes the most recent
+  // Updates the current displayed text & removes the most recent
   // grapheme cluster.
-  void processBackSpace() {
-    if (displayedText.length > 0) {
-      // Remove most recent grapheme cluster from text.
-      displayedText = displayedText.sublist(0, displayedText.length - 1);
-      if (contextWord.length > 1) {
-        contextWord = contextWord.sublist(0, contextWord.length - 1);
+  void processBackSpace(int endOfList) {
+    var selectedText = displayedText.sublist(0, endOfList);
+    if (selectedText.length > 0) {
+      // Remove most recent grapheme cluster from selected text.
+      var tempDisplayedText = selectedText.sublist(0, selectedText.length - 1);
+      // Add the rest of the displayed text that follows, if it exists.
+      if (displayedText.length > endOfList) {
+        tempDisplayedText.addAll(displayedText.sublist(endOfList));
       }
-      // If context contains no letters but current text is not empty.
-      else if (displayedText.isNotEmpty) {
-        var lastChar = displayedText.last;
-        // If currentText contains more than one word, set context to be the
-        // most recent word.
-        if (lastChar != ' ' && lastChar != '⏎' && displayedText.contains(' ')) {
-          var lastWordPos = displayedText.lastIndexOf(' ') + 1;
-          contextWord =
-              [wordStartingSymbol] + displayedText.sublist(lastWordPos);
-        } else {
-          contextWord = [wordStartingSymbol] + displayedText;
-        }
-      } else {
-        contextWord = [wordStartingSymbol];
-      }
+      displayedText = tempDisplayedText;
     }
+    setContextWord();
   }
 
-  // Checks if a given character can be combined with the end of the context to
+  // Checks if a given character can be combined with the end of the text to
   // form a grapheme cluster. If so, they are combined. Otherwise, the character
   // is added as a separate grapheme cluster.
-  void combineCharWithContext(String char) {
-    if (_inputIsCharacter) {
-      contextWord.last = contextWord.last[0];
-      _inputIsCharacter = false;
+  void combineCharWithContext(String char, int endOfList) {
+    _inputIsCharacter = false;
+    var selectedText = displayedText.sublist(0, endOfList);
+    if (selectedText.isNotEmpty) {
+      // Combining the last aksara in the text with the new character.
+      var combination = selectedText.last + char;
+      var canBeCombined = isValidAksara(combination);
+      // If the combination is a valid aksara, the last aksara in the selected
+      // text is set to be this combination (i.e. the character is added to the
+      // last aksara).
+      if (canBeCombined) {
+        displayedText = selectedText.sublist(0, selectedText.length - 1) +
+            [combination] +
+            displayedText.sublist(endOfList);
+      } else {
+        _inputIsCharacter = true;
+        var newPart = selectedText + [char];
+        displayedText = newPart + displayedText.sublist(endOfList);
+      }
+    } else {
+      var isAksara = isValidAksara(char);
+      if (!isAksara) {
+        _inputIsCharacter = true;
+      }
+      displayedText = [char] + displayedText.sublist(endOfList);
     }
-    var canBeCombined = false;
-    var combination = contextWord.last + char;
+    setContextWord();
+  }
+
+  bool isValidAksara(String combination) {
+    var isValid = false;
+    // Checking if this combination matches any existing aksara.
     for (var aksara in _trie.allAksaras) {
       if (combination == aksara) {
-        canBeCombined = true;
+        isValid = true;
         break;
       }
     }
-    if (canBeCombined) {
-      contextWord.last = combination;
-      displayedText.last = combination;
-    } else {
-      _inputIsCharacter = true;
-      var charInput = char + '.*';
-      contextWord.add(charInput);
-      displayedText.add(char);
+    return isValid;
+  }
+
+// The context word is set to be the  last word/segment in the displayed text.
+  void setContextWord() {
+    contextWord = [wordStartingSymbol];
+    if (displayedText.isNotEmpty) {
+      var enterIndex = displayedText.lastIndexOf('\n');
+      var spaceIndex = displayedText.lastIndexOf(' ');
+      var lastWhitespaceIndex =
+          enterIndex > spaceIndex ? enterIndex : spaceIndex;
+      if (lastWhitespaceIndex >= 0) {
+        contextWord += displayedText.sublist(lastWhitespaceIndex + 1);
+      } else {
+        contextWord += displayedText;
+      }
     }
   }
 }

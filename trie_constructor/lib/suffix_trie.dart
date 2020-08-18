@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:fixnum/fixnum.dart';
@@ -29,6 +30,7 @@ import 'word_info.dart';
 // The purpose of this suffix trie is to predict what aksaras come next after
 // a given context.
 class SuffixTrie {
+  // Loads a previously constructed trie from its proto bytes.
   SuffixTrie(Uint8List protoBytes) {
     var storedTrie = pb.SuffixTrie.fromBuffer(protoBytes);
     rootNode = deserializeNode(storedTrie.rootNode);
@@ -36,6 +38,7 @@ class SuffixTrie {
     allAksaras = findAllAksaras();
   }
 
+  // Creates and stores a new trie created using the input words.
   SuffixTrie.fromWords(List<WordInfo> sourceWords, File trieFile) {
     addWords(sourceWords);
     serialiseSuffixTrie(trieFile);
@@ -43,10 +46,21 @@ class SuffixTrie {
 
   SuffixTrie.emptyTrie();
 
+  // Each word in the trie starts with this symbol.
   static const String wordStartingSymbol = '@';
 
+  // A constant used to modify the prediction frequency based on the length
+  // of the context that it follows.
+  static const contextFactor = 16;
+
+  // A constant used to modify the prediction frequency based on the number of
+  // aksaras in the prediction.
+  static const predictionFactor = -1.5;
+
+  // A list of every existing aksara in the trie.
   List<String> allAksaras;
 
+  // The string used to denote a previously unseen aksara.
   String unseenAksara = 'OOV';
 
   // This is an empty node symbolising the top/beginning of the trie.
@@ -246,17 +260,32 @@ class SuffixTrie {
     return allAksaras;
   }
 
+  List<List<String>> getMostLikelyPredictions(
+      List<String> context, int numPredictions) {
+    var results = <WordInfo>[];
+    for (var i = 1; i <= 4; i++) {
+      results.addAll(findPredictions(context, numPredictions, i));
+    }
+
+    results.sort((a, b) => b.frequency.compareTo(a.frequency));
+    var predictionWords = <List<String>>[];
+    for (var j = 0; j < numPredictions; j++) {
+      predictionWords.add(results[j].aksaras);
+    }
+    return predictionWords;
+  }
+
   // For a given group (length of sequence of buttons), gets the top n most
-  // frequent patterns for that group.
-  List<List<String>> findPredictedPatterns(
-      List<String> context, int numPredictions, int group) {
-    var predictions = <List<String>>[];
+  // frequent predictions for that group.
+  List<WordInfo> findPredictions(
+      List<String> context, int numPredictions, int predictionLength) {
+    var predictions = <WordInfo>[];
     TrieNode contextNode;
     while (predictions.length < numPredictions) {
       contextNode = rootNode.contains(context);
       if (contextNode != null && !contextNode.isLeaf) {
         var results = <WordInfo>[];
-        findAllPatterns(results, contextNode, [], group);
+        findAllPredictions(results, contextNode, [], predictionLength);
         results.sort((a, b) => b.frequency.compareTo(a.frequency));
         // Only keep the results that have not already been added to predictions
         for (var i = 0;
@@ -265,17 +294,19 @@ class SuffixTrie {
           var curr = results[i].aksaras.join();
           var isUsed = false;
           for (var j = 0; j < predictions.length && !isUsed; j++) {
-            if (curr == predictions[j].join()) {
+            if (curr == predictions[j].aksaras.join()) {
               isUsed = true;
             }
           }
           if (!isUsed) {
-            predictions.add(results[i].aksaras);
+            var modifiedPrediction = getModifiedPrediction(
+                results[i], context.length, predictionLength);
+            predictions.add(modifiedPrediction);
           }
         }
       }
       // If not enough predictions have been found (< rows), reduce the
-      // context so that more possible patterns can be found.
+      // context so that more possible predictions can be found.
       if (context.isNotEmpty) {
         context = context.sublist(1);
       } else {
@@ -285,15 +316,25 @@ class SuffixTrie {
     return predictions;
   }
 
-  // Gets all possible patterns of length [group] that follow the context node.
-  void findAllPatterns(List<WordInfo> results, TrieNode contextNode,
-      List<String> pattern, int group) {
+  WordInfo getModifiedPrediction(
+      WordInfo prediction, int contextLength, int predictionLength) {
+    var newFrequency = (prediction.frequency *
+            pow(contextLength + 1, contextFactor) *
+            pow(predictionLength, predictionFactor))
+        .round();
+    return WordInfo(prediction.aksaras, newFrequency);
+  }
+
+  // Gets all possible predictions of length [group] that follow the context node.
+  void findAllPredictions(List<WordInfo> results, TrieNode contextNode,
+      List<String> currPrediction, int predictionLength) {
     for (var child in contextNode.children) {
       if (child.text != wordStartingSymbol) {
-        if (pattern.length == (group - 1)) {
-          results.add(WordInfo(pattern + [child.text], child.frequency));
+        if (currPrediction.length == (predictionLength - 1)) {
+          results.add(WordInfo(currPrediction + [child.text], child.frequency));
         } else {
-          findAllPatterns(results, child, pattern + [child.text], group);
+          findAllPredictions(
+              results, child, currPrediction + [child.text], predictionLength);
         }
       }
     }
