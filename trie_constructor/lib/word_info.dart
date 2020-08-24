@@ -14,13 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+import 'aksaras.dart';
+
 // A helper class for Keyboard Oracle which is used to store the
 // information needed for any word that is dealt with.
 class WordInfo {
   static const String wordStartingSymbol = '@';
   // Words in brahmic scripts are made up of aksaras. An aksara can contain
   // multiple characters combined.
-  List<String> aksaras;
+  Aksaras aksaras;
 
   // The frequency of the word according to the dataset. The frequencies of
   // source words are static. When used elsewhere, such as when constructing
@@ -32,8 +34,8 @@ class WordInfo {
   WordInfo.fromString(String input) {
     var wordEnd = input.indexOf('\t');
     frequency = int.parse(input.substring(wordEnd));
-    aksaras = [wordStartingSymbol] +
-        input.substring(0, wordEnd).trimRight().split(' ');
+    aksaras = Aksaras([wordStartingSymbol] +
+        input.substring(0, wordEnd).trimRight().split(' '));
   }
 
   @override

@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:bubble/bubble.dart';
+import 'package:trie_constructor/aksaras.dart';
 
 import 'dynamic_keyboard.dart';
 
@@ -69,9 +70,9 @@ class _MyHomePageState extends State<MyHomePage> {
   int maxNumOfPredictions = 80;
 
   // The number of predictions displayed when the app starts up.
-  int numOfPredictions = 50;
+  int numOfPredictions = 60;
 
-  final _predictionController = TextEditingController(text: '50');
+  final _predictionController = TextEditingController(text: '60');
 
   final _textDisplayController = TextEditingController(text: '');
 
@@ -124,9 +125,9 @@ class _MyHomePageState extends State<MyHomePage> {
     // font size is at its maximum value. These maximum number values are
     // taken from experiments using the Google Pixel.
     if (language == 'mlym') {
-      maxNumOfPredictions = 10;
+      maxNumOfPredictions = 30;
     } else {
-      maxNumOfPredictions = 40;
+      maxNumOfPredictions = 50;
     }
     // For each decrement  by 1 of the font size, there is room for approx.
     // 10 more predictions to be displayed.
@@ -142,12 +143,11 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  void updateTextController() {
+  void updateTextController(int offset) {
     var text = keyboard.displayedText.join();
     _textDisplayController.value = TextEditingValue(
       text: text,
-      selection:
-          TextSelection(baseOffset: text.length, extentOffset: text.length),
+      selection: TextSelection(baseOffset: offset, extentOffset: offset),
     );
   }
 
@@ -295,8 +295,8 @@ class _MyHomePageState extends State<MyHomePage> {
               overflow: Overflow.visible,
               children: <Widget>[
                 Positioned(
-                  right: -40.0,
-                  top: -40.0,
+                  right: -45.0,
+                  top: -45.0,
                   child: InkResponse(
                     onTap: () {
                       Navigator.of(context).pop();
@@ -431,7 +431,10 @@ class _MyHomePageState extends State<MyHomePage> {
                 setState(() {
                   var end = getLastAksaraIndex();
                   keyboard.processNewInput(keys[i], end);
-                  updateTextController();
+                  updateTextController(keyboard.displayedText
+                      .sublist(0, end + keys[i].length)
+                      .join()
+                      .length);
                   keyboard.fillKeyboard();
                 });
               },
@@ -462,7 +465,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 setState(() {
                   var end = getLastAksaraIndex();
                   keyboard.combineCharWithContext(characters[i], end);
-                  updateTextController();
+                  updateTextController(
+                      keyboard.displayedText.sublist(0, end + 1).join().length);
                   keyboard.fillKeyboard();
                   keyboardType = 'aksara';
                 });
@@ -545,8 +549,9 @@ class _MyHomePageState extends State<MyHomePage> {
               onPressed: () {
                 setState(() {
                   var end = getLastAksaraIndex();
-                  keyboard.processNewInput([' '], end);
-                  updateTextController();
+                  keyboard.processNewInput(Aksaras([' ']), end);
+                  updateTextController(
+                      keyboard.displayedText.sublist(0, end + 1).join().length);
                   keyboard.fillKeyboard();
                 });
               },
@@ -563,8 +568,14 @@ class _MyHomePageState extends State<MyHomePage> {
               onPressed: () {
                 setState(() {
                   var end = getLastAksaraIndex();
-                  keyboard.processNewInput(['←'], end);
-                  updateTextController();
+                  keyboard.processNewInput(Aksaras(['←']), end);
+                  var newEnd = end <= 1
+                      ? end
+                      : keyboard.displayedText
+                          .sublist(0, end - 1)
+                          .join()
+                          .length;
+                  updateTextController(newEnd);
                   keyboard.fillKeyboard();
                 });
               },
@@ -580,8 +591,9 @@ class _MyHomePageState extends State<MyHomePage> {
               color: const Color(0xffb7b7b7),
               onPressed: () {
                 var end = getLastAksaraIndex();
-                keyboard.processNewInput(['\n'], end);
-                updateTextController();
+                keyboard.processNewInput(Aksaras(['\n']), end);
+                updateTextController(
+                    keyboard.displayedText.sublist(0, end + 1).join().length);
                 keyboard.fillKeyboard();
               },
               child: Icon(

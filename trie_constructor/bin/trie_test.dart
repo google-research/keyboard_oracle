@@ -17,6 +17,7 @@ limitations under the License.
 import 'dart:io';
 import 'dart:math';
 
+import 'package:trie_constructor/aksaras.dart';
 import 'package:trie_constructor/word_info.dart';
 import 'package:trie_constructor/suffix_trie.dart';
 
@@ -78,7 +79,7 @@ double calculateEntropy(SuffixTrie trie, List<WordInfo> words) {
   var log2Prob = 0.0;
   var numAksarasTested = 0;
   for (var word in words) {
-    var context = [''];
+    var context = Aksaras(['']);
     for (var aksara in word.aksaras) {
       var probs = trie.getProbabilities(context);
       var p = probs[aksara];
@@ -107,11 +108,11 @@ double calculateKeyboardAccuracy(
   var modelScore = 0;
   var maxScore = 0;
   for (var word in words) {
-    var context = ['@'];
+    var context = Aksaras(['@']);
     for (var aksara in word.aksaras) {
       if (aksara != WordInfo.wordStartingSymbol) {
         maxScore += word.frequency;
-        var predictions = <List<String>>[];
+        var predictions = <Aksaras>[];
         if (isProbabilisticModel) {
           predictions =
               trie.getModelPredictions(context, defaultNumPredictions - 30);
@@ -146,8 +147,8 @@ void calculateClicksPerAksara(SuffixTrie trie, List<WordInfo> words) {
   var totalAksaras = 0;
   var numMissedWords = 0;
   for (var word in words) {
-    var context = ['@'];
-    var predictions = <List<String>>[];
+    var context = Aksaras(['@']);
+    var predictions = <Aksaras>[];
     var wordClicks = 0;
     var i;
     for (i = 1; i < word.aksaras.length;) {
@@ -157,7 +158,8 @@ void calculateClicksPerAksara(SuffixTrie trie, List<WordInfo> words) {
       predictions.sort(((a, b) => b.length.compareTo(a.length)));
       for (var prediction in predictions) {
         if (i + prediction.length <= word.aksaras.length) {
-          var pattern = word.aksaras.sublist(i, i + prediction.length);
+          var pattern =
+              List<String>.from(word.aksaras.sublist(i, i + prediction.length));
           if (pattern.join() == prediction.join()) {
             context.addAll(pattern);
             foundMatch = true;
@@ -179,6 +181,8 @@ void calculateClicksPerAksara(SuffixTrie trie, List<WordInfo> words) {
     }
   }
   print('Number of clicks per aksara test:');
+  print('p value: ${SuffixTrie.predictionFactor}');
+  print('c value: ${SuffixTrie.contextFactor}');
   print('missed $numMissedWords out of ${words.length} test words');
   print('${totalClicks / totalAksaras} clicks per aksara');
 }

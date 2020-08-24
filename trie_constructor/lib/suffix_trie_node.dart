@@ -14,11 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+import 'aksaras.dart';
+import 'word_info.dart';
+
 // The nodes that make up the suffix trie. Each one contains an aksara,
 // the frequency of that aksara after its parent, its children,
 // and whether it is at the bottom of the trie or not.
-import 'word_info.dart';
-
 class TrieNode {
   String text = '';
   int frequency = 0;
@@ -46,34 +47,34 @@ class TrieNode {
       isLeaf = false;
     }
     var firstChar = input.aksaras[0];
-    var remainingAksara = input.aksaras.sublist(1);
+    var remainingAksaras = input.aksaras.sublist(1);
     TrieNode newNode;
-    if (contains([firstChar]) == null) {
+    if (contains(Aksaras([firstChar])) == null) {
       newNode = TrieNode(firstChar, input.frequency);
       children.add(newNode);
     } else {
       newNode = children.firstWhere((child) => child.text == firstChar);
       newNode.frequency += input.frequency;
     }
-    newNode.addText(WordInfo(remainingAksara, input.frequency));
+    newNode.addText(WordInfo(Aksaras(remainingAksaras), input.frequency));
     // A nodes children are sorted in order of how likely they are
     // to come directly after the current node.
     children.sort((a, b) => b.frequency.compareTo(a.frequency));
   }
 
   // Checks whether a given word is contained in the trie.
-  TrieNode contains(List<String> word) {
+  TrieNode contains(Aksaras word) {
     TrieNode finalNode;
     if (word.isNotEmpty && children.isNotEmpty) {
       var firstAksara = word[0];
       var nextNode = children.firstWhere((child) => child.text == firstAksara,
           orElse: () => null);
       if (nextNode != null) {
-        var remainingAksara = word.sublist(1);
-        if (remainingAksara.isEmpty) {
+        var remainingAksaras = Aksaras(word.sublist(1));
+        if (remainingAksaras.isEmpty) {
           finalNode = nextNode;
         } else {
-          finalNode = nextNode.contains(remainingAksara);
+          finalNode = nextNode.contains(remainingAksaras);
         }
       }
     } else if (text.isEmpty && word.isEmpty) {
@@ -82,9 +83,9 @@ class TrieNode {
     return finalNode;
   }
 
-  void getWords(List<List<String>> words, List<String> word) {
+  void getWords(List<Aksaras> words, List<String> word) {
     for (var child in children) {
-      var tempWord = word + [child.text];
+      var tempWord = Aksaras(word + [child.text]);
       if (child.children.isEmpty) {
         words.add(tempWord);
       } else {
@@ -93,11 +94,33 @@ class TrieNode {
     }
   }
 
-  @override
-  String toString() {
-    var leafMarker = isLeaf ? '#' : '';
-    var nodeChildren = children.isNotEmpty ? children.toString() : '';
-    var result = '$text$leafMarker :  $frequency $nodeChildren';
-    return result;
+  // This prints the trie from the current node in a readable way. For example,
+  // if the trie contained 'afd' with frequency 2, 'ef' with frequency 4 and
+  //'abcd' with frequency 1, printing the root node would display:
+  //(0) ->
+  //         @(7) ->
+  //                 e(4) ->
+  //                         f(4)
+  //                 a(3) ->
+  //                         f(2) ->
+  //                                 d(2)
+  //                         b(1) ->
+  //                                 c(1) ->
+  //                                         d(1)
+  //         f(6) ->
+  //                 d(2)
+  //         d(3)
+  //         b(1) ->
+  //                 c(1) ->
+  //                         d(1)
+  //         c(1) ->
+  //                 d(1)
+
+  void printNode({int offset = 0}) {
+    var tabs = '\t' * offset;
+    print('$tabs ${text}($frequency) ${children.isNotEmpty ? '->' : ''}');
+    for (var child in children) {
+      child.printNode(offset: offset + 1);
+    }
   }
 }

@@ -23,6 +23,7 @@ import 'package:fixnum/fixnum.dart';
 import 'suffix_trie_node.dart';
 import 'suffix_trie.pb.dart' as pb;
 import 'word_info.dart';
+import 'aksaras.dart';
 
 // A trie constructed using input words and all of their suffixes.
 // Each node represents an aksara (grapheme cluster) and has a frequency which
@@ -51,14 +52,14 @@ class SuffixTrie {
 
   // A constant used to modify the prediction frequency based on the length
   // of the context that it follows.
-  static const contextFactor = 16;
+  static double contextFactor = 12;
 
   // A constant used to modify the prediction frequency based on the number of
   // aksaras in the prediction.
-  static const predictionFactor = -1.5;
+  static double predictionFactor = -3;
 
   // A list of every existing aksara in the trie.
-  List<String> allAksaras;
+  Aksaras allAksaras;
 
   // The string used to denote a previously unseen aksara.
   String unseenAksara = 'OOV';
@@ -125,11 +126,24 @@ class SuffixTrie {
 
   // For each WordInfo object (containing a word and a frequency), each suffix
   // of the word is added to the trie along with the word's frequency.
+  // For example, if adding the word @ABCD (@ is the word starting symbol), the
+  // suffixes we would add are @ABCD, BCD, CD, D (Reasons for omitting ABCD are
+  // outlined below). This would result in a trie with a root which has @, B,
+  // C, D as its children.
   void addWords(List<WordInfo> words) {
     if (words != null && words.isNotEmpty) {
       for (var word in words) {
         for (var i = 0; i < word.aksaras.length; i++) {
-          rootNode.addText(WordInfo(word.aksaras.sublist(i), word.frequency));
+          // We do not add the suffix starting with the word's first aksara
+          // (i=0 is the wordStartingSymbol) as we want to differentiate
+          // between aksaras that appear at the beginning and middle of a word.
+          // Aksaras that appear at the beginning are often particular to that
+          // context and having them exist in the suffix trie in non-beginning
+          // contexts could be inaccurate.
+          if (i != 1) {
+            rootNode.addText(
+                WordInfo(Aksaras(word.aksaras.sublist(i)), word.frequency));
+          }
         }
       }
     }
@@ -148,8 +162,17 @@ class SuffixTrie {
   }
 
   // Checks whether the given context exists in the trie.
-  bool contains(List<String> context) {
+  bool contains(Aksaras context) {
     return (rootNode.contains(context) != null);
+  }
+
+  void printContextTrie(Aksaras context) {
+    var contextNode = rootNode.contains(context);
+    if (contextNode != null) {
+      contextNode.printNode();
+    } else {
+      print('This context does not exist in the trie.');
+    }
   }
 
   // Given a context, returns how probable it is for each existing aksara to
@@ -157,7 +180,7 @@ class SuffixTrie {
   // https://git.io/JJaGl . More information on the method itself can be
   // found in Sections 3 and 4 of this paper:
   // https://www.repository.cam.ac.uk/handle/1810/254106
-  Map<String, double> getProbabilities(List<String> context) {
+  Map<String, double> getProbabilities(Aksaras context) {
     // Kneser-Ney-esque smoothing parameters copied from Dasher.
     const knAlpha = 0.49;
     const knBeta = 0.77;
@@ -176,7 +199,7 @@ class SuffixTrie {
     var currentCtx = List<String>.from(context);
     // Finding the longest context that exists in the trie to use as context.
     while (currentNode == null) {
-      currentNode = rootNode.contains(currentCtx);
+      currentNode = rootNode.contains(Aksaras(currentCtx));
       if (currentCtx.isNotEmpty) {
         currentCtx = currentCtx.sublist(1);
       } else {
@@ -204,7 +227,7 @@ class SuffixTrie {
         hasProcessedRoot = true;
       } else {
         currentCtx = currentCtx.sublist(1);
-        currentNode = rootNode.contains(currentCtx);
+        currentNode = rootNode.contains(Aksaras(currentCtx));
       }
       gamma = totalMass;
     }
@@ -231,25 +254,24 @@ class SuffixTrie {
 
 // Returns the most likely n aksaras to come after the context, according
 // to the probabilistic language model.
-  List<List<String>> getModelPredictions(
-      List<String> context, int numPredictions) {
+  List<Aksaras> getModelPredictions(Aksaras context, int numPredictions) {
     var probs = getProbabilities(context);
     var sortedProbs = probs.keys.toList()
       ..sort((k1, k2) => probs[k2].compareTo(probs[k1]));
-    var predictions = <List<String>>[];
+    var predictions = <Aksaras>[];
     for (var i = 0;
         predictions.length < numPredictions && i < sortedProbs.length;
         i++) {
       if (sortedProbs[i] != WordInfo.wordStartingSymbol) {
-        predictions.add([sortedProbs[i]]);
+        predictions.add(Aksaras([sortedProbs[i]]));
       }
     }
     return predictions;
   }
 
   // Gets every grapheme cluster in existence in the trie.
-  List<String> findAllAksaras() {
-    var allAksaras = <String>[];
+  Aksaras findAllAksaras() {
+    var allAksaras = Aksaras([]);
     for (var child in rootNode.children) {
       if (!allAksaras.contains(child.text)) {
         allAksaras.add(child.text);
@@ -260,15 +282,14 @@ class SuffixTrie {
     return allAksaras;
   }
 
-  List<List<String>> getMostLikelyPredictions(
-      List<String> context, int numPredictions) {
+  List<Aksaras> getMostLikelyPredictions(Aksaras context, int numPredictions) {
     var results = <WordInfo>[];
     for (var i = 1; i <= 4; i++) {
       results.addAll(findPredictions(context, numPredictions, i));
     }
 
     results.sort((a, b) => b.frequency.compareTo(a.frequency));
-    var predictionWords = <List<String>>[];
+    var predictionWords = <Aksaras>[];
     for (var j = 0; j < numPredictions; j++) {
       predictionWords.add(results[j].aksaras);
     }
@@ -278,14 +299,14 @@ class SuffixTrie {
   // For a given group (length of sequence of buttons), gets the top n most
   // frequent predictions for that group.
   List<WordInfo> findPredictions(
-      List<String> context, int numPredictions, int predictionLength) {
+      Aksaras context, int numPredictions, int predictionLength) {
     var predictions = <WordInfo>[];
     TrieNode contextNode;
     while (predictions.length < numPredictions) {
       contextNode = rootNode.contains(context);
       if (contextNode != null && !contextNode.isLeaf) {
         var results = <WordInfo>[];
-        findAllPredictions(results, contextNode, [], predictionLength);
+        findAllPredictions(results, contextNode, Aksaras([]), predictionLength);
         results.sort((a, b) => b.frequency.compareTo(a.frequency));
         // Only keep the results that have not already been added to predictions
         for (var i = 0;
@@ -305,10 +326,12 @@ class SuffixTrie {
           }
         }
       }
-      // If not enough predictions have been found (< rows), reduce the
-      // context so that more possible predictions can be found.
+      // If not enough predictions have been found (< numPredictions), reduce
+      // the context so that more possible predictions can be found. If the
+      // original context was @ABCD, the contexts we would try are @ABCD, ABCD,
+      // BCD, CD, D (@ is the word starting symbol).
       if (context.isNotEmpty) {
-        context = context.sublist(1);
+        context = Aksaras(context.sublist(1));
       } else {
         break;
       }
@@ -327,23 +350,28 @@ class SuffixTrie {
 
   // Gets all possible predictions of length [group] that follow the context node.
   void findAllPredictions(List<WordInfo> results, TrieNode contextNode,
-      List<String> currPrediction, int predictionLength) {
+      Aksaras currPrediction, int predictionLength) {
     for (var child in contextNode.children) {
       if (child.text != wordStartingSymbol) {
         if (currPrediction.length == (predictionLength - 1)) {
-          results.add(WordInfo(currPrediction + [child.text], child.frequency));
+          results.add(WordInfo(
+              Aksaras(currPrediction + [child.text]), child.frequency));
         } else {
-          findAllPredictions(
-              results, child, currPrediction + [child.text], predictionLength);
+          findAllPredictions(results, child,
+              Aksaras(currPrediction + [child.text]), predictionLength);
         }
       }
     }
   }
 
-  List<List<String>> constructAllWords() {
-    var allWords = <List<String>>[];
+  List<Aksaras> constructAllWords() {
+    var allWords = <Aksaras>[];
     var startingNode = rootNode.children.first;
     startingNode.getWords(allWords, [startingNode.text]);
     return allWords;
+  }
+
+  void printTrie() {
+    return rootNode.printNode();
   }
 }
