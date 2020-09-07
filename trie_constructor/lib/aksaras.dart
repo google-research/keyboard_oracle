@@ -43,4 +43,12 @@ class Aksaras<String> extends ListBase<String> {
 
   @override
   void addAll(Iterable<String> all) => innerList.addAll(all);
+
+  @override
+  bool operator ==(o) {
+    return (o is Aksaras) && (innerList.join() == o.innerList.join());
+  }
+
+  @override
+  int get hashCode => innerList.join().hashCode;
 }

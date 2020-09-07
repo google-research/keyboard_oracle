@@ -20,9 +20,10 @@ import 'dart:typed_data';
 
 import 'package:fixnum/fixnum.dart';
 
-import 'suffix_trie_node.dart';
+import 'src/cached_pair.dart';
+import 'src/suffix_trie_node.dart';
 import 'suffix_trie.pb.dart' as pb;
-import 'word_info.dart';
+import 'src/word_info.dart';
 import 'aksaras.dart';
 
 // A trie constructed using input words and all of their suffixes.
@@ -40,7 +41,11 @@ class SuffixTrie {
   }
 
   // Creates and stores a new trie created using the input words.
-  SuffixTrie.fromWords(List<WordInfo> sourceWords, File trieFile) {
+  SuffixTrie.fromWords(List<WordInfo> sourceWords) {
+    addWords(sourceWords);
+  }
+
+  SuffixTrie.serialiseTrie(List<WordInfo> sourceWords, File trieFile) {
     addWords(sourceWords);
     serialiseSuffixTrie(trieFile);
   }
@@ -52,20 +57,26 @@ class SuffixTrie {
 
   // A constant used to modify the prediction frequency based on the length
   // of the context that it follows.
-  static double contextFactor = 12;
+  double contextFactor = 16;
 
   // A constant used to modify the prediction frequency based on the number of
   // aksaras in the prediction.
-  static double predictionFactor = -3;
+  double predictionFactor = -5;
+
+  static const numPredictionLengths = 4;
+
+  static const maxNumPredictions = 160;
+
+  // The string used to denote a previously unseen aksara.
+  static const unseenAksara = 'OOV';
 
   // A list of every existing aksara in the trie.
   Aksaras allAksaras;
 
-  // The string used to denote a previously unseen aksara.
-  String unseenAksara = 'OOV';
-
   // This is an empty node symbolising the top/beginning of the trie.
   TrieNode rootNode = TrieNode.emptyNode();
+
+  Map<CachedPair, List<WordInfo>> cachedPredictions = {};
 
   // The objects data is stored in a new file using a protocol buffer
   void serialiseSuffixTrie(File trieFile) async {
@@ -252,8 +263,8 @@ class SuffixTrie {
     return probs;
   }
 
-// Returns the most likely n aksaras to come after the context, according
-// to the probabilistic language model.
+  // Returns the most likely n aksaras to come after the context, according
+  // to the probabilistic language model.
   List<Aksaras> getModelPredictions(Aksaras context, int numPredictions) {
     var probs = getProbabilities(context);
     var sortedProbs = probs.keys.toList()
@@ -272,9 +283,11 @@ class SuffixTrie {
   // Gets every grapheme cluster in existence in the trie.
   Aksaras findAllAksaras() {
     var allAksaras = Aksaras([]);
-    for (var child in rootNode.children) {
-      if (!allAksaras.contains(child.text)) {
-        allAksaras.add(child.text);
+    var possibleAksaras =
+        rootNode.children + rootNode.contains(Aksaras(['@'])).children;
+    for (var node in possibleAksaras) {
+      if (!allAksaras.contains(node.text)) {
+        allAksaras.add(node.text);
       }
     }
     // This represents an aksara that has not been seen before.
@@ -282,61 +295,93 @@ class SuffixTrie {
     return allAksaras;
   }
 
-  List<Aksaras> getMostLikelyPredictions(Aksaras context, int numPredictions) {
-    var results = <WordInfo>[];
-    for (var i = 1; i <= 4; i++) {
-      results.addAll(findPredictions(context, numPredictions, i));
+  List<Aksaras> getMostLikelyPredictions(Aksaras context, int numAksaras) {
+    var contexts = <Aksaras>[];
+    // The context is reduced each iteration so that more possible predictions
+    // can be found. If the original context was @ABCD, the contexts we would
+    // try are @ABCD, ABCD, BCD, CD, D, [] (@ is the word starting symbol).
+    if (context.length == 1) {
+      contexts.add(context);
+    } else {
+      for (var i = 0; i <= context.length; i++) {
+        contexts.add(Aksaras(context.sublist(i)));
+      }
     }
-
+    var results = <WordInfo>[];
+    // Get predictions for each prediction length and context.
+    for (var i = 1; i <= numPredictionLengths; i++) {
+      var tempResults = <WordInfo>[];
+      for (var currCtx in contexts) {
+        tempResults.addAll(findPredictions(currCtx, i));
+      }
+      // Remove duplicates from the temp results (results of the same length
+      // from multiple different contexts.
+      results.addAll(removeDuplicates(tempResults));
+    }
+    // Get the top predictions in terms of frequency.
     results.sort((a, b) => b.frequency.compareTo(a.frequency));
     var predictionWords = <Aksaras>[];
-    for (var j = 0; j < numPredictions; j++) {
-      predictionWords.add(results[j].aksaras);
+    var aksarasUsed = 0;
+    var hasSpace = true;
+    for (var j = 0; hasSpace; j++) {
+      if (aksarasUsed + results[j].aksaras.length + 1 <= numAksaras) {
+        predictionWords.add(results[j].aksaras);
+        aksarasUsed += results[j].aksaras.length + 1;
+      } else {
+        hasSpace = false;
+      }
     }
     return predictionWords;
   }
 
   // For a given group (length of sequence of buttons), gets the top n most
   // frequent predictions for that group.
-  List<WordInfo> findPredictions(
-      Aksaras context, int numPredictions, int predictionLength) {
+  List<WordInfo> findPredictions(Aksaras context, int predictionLength) {
+    if (cachedPredictions[CachedPair(predictionLength, context.join())] !=
+        null) {
+      return cachedPredictions[CachedPair(predictionLength, context.join())];
+    }
     var predictions = <WordInfo>[];
-    TrieNode contextNode;
-    while (predictions.length < numPredictions) {
-      contextNode = rootNode.contains(context);
-      if (contextNode != null && !contextNode.isLeaf) {
-        var results = <WordInfo>[];
-        findAllPredictions(results, contextNode, Aksaras([]), predictionLength);
+    var contextNode = rootNode.contains(context);
+    // If the context node has any children.
+    if (contextNode != null && !contextNode.isLeaf) {
+      var results = <WordInfo>[];
+      // Add every possible predictionLength prediction that follows the context
+      // node to our results.
+      findAllPredictions(results, contextNode, Aksaras([]), predictionLength);
+      // Only the top [maxNumPredictions] results are needed.
+      if (results.length > maxNumPredictions) {
         results.sort((a, b) => b.frequency.compareTo(a.frequency));
-        // Only keep the results that have not already been added to predictions
-        for (var i = 0;
-            i < results.length && predictions.length < numPredictions;
-            i++) {
-          var curr = results[i].aksaras.join();
-          var isUsed = false;
-          for (var j = 0; j < predictions.length && !isUsed; j++) {
-            if (curr == predictions[j].aksaras.join()) {
-              isUsed = true;
-            }
-          }
-          if (!isUsed) {
-            var modifiedPrediction = getModifiedPrediction(
-                results[i], context.length, predictionLength);
-            predictions.add(modifiedPrediction);
-          }
-        }
+        results = results.sublist(0, maxNumPredictions);
       }
-      // If not enough predictions have been found (< numPredictions), reduce
-      // the context so that more possible predictions can be found. If the
-      // original context was @ABCD, the contexts we would try are @ABCD, ABCD,
-      // BCD, CD, D (@ is the word starting symbol).
-      if (context.isNotEmpty) {
-        context = Aksaras(context.sublist(1));
-      } else {
-        break;
+      // Modify each result with its updated frequency based on context length
+      // and prediction length.
+      for (var result in results) {
+        predictions.add(
+            getModifiedPrediction(result, context.length, predictionLength));
       }
     }
+    cachedPredictions[CachedPair(predictionLength, context.join())] =
+        predictions;
     return predictions;
+  }
+
+// Only returns the unique WordInfo objects in the original list.
+  List<WordInfo> removeDuplicates(List<WordInfo> predictions) {
+    var uniquePredictions = <WordInfo>[];
+    for (var prediction in predictions) {
+      var curr = prediction.aksaras.join();
+      var isDuplicate = false;
+      for (var j = 0; j < uniquePredictions.length && !isDuplicate; j++) {
+        if (curr == uniquePredictions[j].aksaras.join()) {
+          isDuplicate = true;
+        }
+      }
+      if (!isDuplicate) {
+        uniquePredictions.add(prediction);
+      }
+    }
+    return uniquePredictions;
   }
 
   WordInfo getModifiedPrediction(

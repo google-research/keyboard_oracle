@@ -28,6 +28,7 @@ dependencies:
   flutter:
     sdk: flutter
   bubble: ^1.1.9+1
+  flutter_emoji: ^2.2.1+1
   trie_constructor:
     path: # ENTER LOCAL PATH TO TRIE CONSTRUCTOR HERE
 
@@ -44,5 +45,5 @@ flutter:
 
   uses-material-design: true
   assets:
-  - assets/mlym_trie.bin
-  - assets/deva_trie.bin
+  - assets/ml_trie.bin
+  - assets/hi_trie.bin

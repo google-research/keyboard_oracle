@@ -17,39 +17,20 @@ library keyboard_oracle;
 
 import 'dart:typed_data';
 
+import 'package:flutter_emoji/flutter_emoji.dart';
 import 'package:trie_constructor/aksaras.dart';
 import 'package:trie_constructor/suffix_trie.dart';
 
 class DynamicKeyboard {
-  DynamicKeyboard(Uint8List protoBytes, this._numOfPredictions) {
+  DynamicKeyboard(Uint8List protoBytes, this._numOfAksaras) {
     _trie = SuffixTrie(protoBytes);
-    mapCharNeighbours();
     fillKeyboard();
-  }
-
-  // Initialises keyboard values to their base values and fills the keys
-  // in dynamically.
-  void fillKeyboard() {
-    var contextAsString = contextWord.join();
-    // If keys have already been created for this context
-    if (_cachedKeys.containsKey(contextAsString)) {
-      keys = _cachedKeys[contextAsString];
-    }
-    // Otherwise dynamically create keys and cache them.
-    else {
-      dynamicallyChangeButtons();
-      _cachedKeys[contextAsString] = keys;
-    }
   }
 
   static const String wordStartingSymbol = '@';
 
   // The text displayed on the screen currently.
   Aksaras displayedText = Aksaras([]);
-
-  // A map that, for each character, gives a list
-  // of what immediately succeeds it.
-  Map<String, List<String>> _charNeighbours = {};
 
   // Keys created from previous entered contexts.
   Map<String, List<Aksaras>> _cachedKeys = {};
@@ -60,90 +41,57 @@ class DynamicKeyboard {
   // A list of length-1 single characters displayed at bottom of keyboard.
   List<String> charPredictions = [];
 
-  // If the user has clicked one of the character buttons rather than a
-  // pattern or grapheme cluster, it needs to be handled differently.
-  bool _inputIsCharacter = false;
-
   // The language model used to predict what should be displayed on the
   // keyboard.
   SuffixTrie _trie;
 
-  // The number of predictions generated for the keyboard.
-  int _numOfPredictions;
+  // The number of aksara predictions generated for the keyboard.
+  int _numOfAksaras;
 
   // The keys, as grapheme clusters, displayed on the buttons in the grid.
   List<Aksaras> keys = [];
 
-  void setNumOfPredictions(int newNumOfPredictions) {
-    if (_numOfPredictions != newNumOfPredictions) {
-      _numOfPredictions = newNumOfPredictions;
+  void setNumOfAksaras(int newNumOfAksaras) {
+    if (_numOfAksaras != newNumOfAksaras) {
+      _numOfAksaras = newNumOfAksaras;
       _cachedKeys.clear();
     }
   }
 
-  // Maps each existing character to a list of characters that can
-  // come after it.
-  void mapCharNeighbours() {
-    var _sourceWords = _trie.constructAllWords();
-    //for each word
-    for (var word in _sourceWords) {
-      // for each grapheme cluster in word
-      for (var i = 0; i < word.length; i++) {
-        // for each character in the grapheme cluster
-        for (var j = 0; j < word[i].length; j++) {
-          var currentChar = word[i][j];
-          var nextChar = '';
-          if (j != word[i].length - 1) {
-            nextChar = word[i][j + 1];
-          } else if (i != word.length - 1) {
-            // If it is the last character in a grapheme cluster, the next
-            // character will be the first character in the next
-            // grapheme cluster.
-            nextChar = word[i + 1][0];
-          }
-          // If the character is not in the map yet, it is added.
-          if (!_charNeighbours.containsKey(currentChar)) {
-            if (nextChar.isNotEmpty) {
-              _charNeighbours[currentChar] = [nextChar];
-            } else {
-              _charNeighbours[currentChar] = [];
-            }
-          }
-          // Only add the next character if it is not in the
-          // current list already.
-          else if (nextChar.isNotEmpty &&
-              !_charNeighbours[currentChar].contains(nextChar)) {
-            _charNeighbours[currentChar].add(nextChar);
-          }
-        }
-      }
+  void setPValue(double pValue) {
+    if (_trie.predictionFactor != pValue) {
+      _trie.predictionFactor = pValue;
+      _trie.cachedPredictions.clear();
+      _cachedKeys.clear();
     }
   }
 
-  // Changes the list of keyboard buttons according to the
-  // context/context-change.
-  void dynamicallyChangeButtons() {
-    keys = <Aksaras>[];
-    var patterns =
-        _trie.getMostLikelyPredictions(contextWord, _numOfPredictions);
-    // Sets the keyboard keys to be the most likely predictions found.
-    for (var i = 0; i < _numOfPredictions; i++) {
-      if (patterns.length > i) {
-        keys.add(patterns[i]);
-      } else {
-        keys.add(Aksaras([]));
-      }
+  void setCValue(double cValue) {
+    if (_trie.contextFactor != cValue) {
+      _trie.contextFactor = cValue;
+      _trie.cachedPredictions.clear();
+      _cachedKeys.clear();
     }
-    setCharPredictions();
   }
 
-  // Given the context, get the possible single 1-length characters that
-  // could come immediately afterwards.
-  void setCharPredictions() {
-    var lastChar = contextWord.last[contextWord.last.length - 1];
-    charPredictions = _charNeighbours[lastChar];
-    if (charPredictions != null) {
-      charPredictions.sort();
+  void reset(int numOfAksaras) {
+    setNumOfAksaras(numOfAksaras);
+    displayedText.clear();
+    setContextWord();
+  }
+
+  // Initialises keyboard values to their base values and fills the keys
+  // in dynamically.
+  void fillKeyboard() {
+    var contextAsString = contextWord.join();
+    // If keys have already been created for this context
+    if (_cachedKeys.containsKey(contextAsString)) {
+      keys = _cachedKeys[contextAsString];
+    } else {
+      // Sets the keyboard keys to be the most likely predictions found according
+      // to the context.
+      keys = _trie.getMostLikelyPredictions(contextWord, _numOfAksaras);
+      _cachedKeys[contextAsString] = keys;
     }
   }
 
@@ -152,30 +100,10 @@ class DynamicKeyboard {
     // If the input is not a letter (i.e. if it is a symbol or number).
     if (input.length == 1 && input.first == '←') {
       processBackSpace(endOfList);
-    } else {
-      // If the most recent input before this input was a character, we check
-      // if it can be combined with the the first aksara of this input.
-      // Otherwise, it is a grapheme cluster of its own.
-      if (_inputIsCharacter) {
-        var selectedText = displayedText.sublist(0, endOfList);
-        if (selectedText.isNotEmpty) {
-          var combination = selectedText.last + input.first;
-          var canBeCombined = isValidAksara(combination);
-          if (canBeCombined) {
-            displayedText = Aksaras(
-                selectedText.sublist(0, selectedText.length - 1) +
-                    [combination] +
-                    displayedText.sublist(endOfList));
-            input = Aksaras(input.sublist(1));
-          }
-        }
-      }
-      if (input.isNotEmpty) {
-        var newPart = displayedText.sublist(0, endOfList) + input;
-        displayedText = Aksaras(newPart + displayedText.sublist(endOfList));
-      }
+    } else if (input.isNotEmpty) {
+      var newPart = displayedText.sublist(0, endOfList) + input;
+      displayedText = Aksaras(newPart + displayedText.sublist(endOfList));
     }
-    _inputIsCharacter = false;
     setContextWord();
   }
 
@@ -193,67 +121,71 @@ class DynamicKeyboard {
       }
       displayedText = tempDisplayedText;
     }
-    setContextWord();
-  }
-
-  // Checks if a given character can be combined with the end of the text to
-  // form a grapheme cluster. If so, they are combined. Otherwise, the character
-  // is added as a separate grapheme cluster.
-  void combineCharWithContext(String char, int endOfList) {
-    _inputIsCharacter = false;
-    var selectedText = displayedText.sublist(0, endOfList);
-    if (selectedText.isNotEmpty) {
-      // Combining the last aksara in the text with the new character.
-      var combination = selectedText.last + char;
-      var canBeCombined = isValidAksara(combination);
-      // If the combination is a valid aksara, the last aksara in the selected
-      // text is set to be this combination (i.e. the character is added to the
-      // last aksara).
-      if (canBeCombined) {
-        displayedText = Aksaras(
-            selectedText.sublist(0, selectedText.length - 1) +
-                [combination] +
-                displayedText.sublist(endOfList));
-      } else {
-        _inputIsCharacter = true;
-        var newPart = selectedText + [char];
-        displayedText = Aksaras(newPart + displayedText.sublist(endOfList));
-      }
-    } else {
-      var isAksara = isValidAksara(char);
-      if (!isAksara) {
-        _inputIsCharacter = true;
-      }
-      displayedText = Aksaras([char] + displayedText.sublist(endOfList));
-    }
-    setContextWord();
-  }
-
-  bool isValidAksara(String combination) {
-    var isValid = false;
-    // Checking if this combination matches any existing aksara.
-    for (var aksara in _trie.allAksaras) {
-      if (combination == aksara) {
-        isValid = true;
-        break;
-      }
-    }
-    return isValid;
   }
 
 // The context word is set to be the  last word/segment in the displayed text.
   void setContextWord() {
     contextWord = Aksaras([wordStartingSymbol]);
     if (displayedText.isNotEmpty) {
-      var enterIndex = displayedText.lastIndexOf('\n');
-      var spaceIndex = displayedText.lastIndexOf(' ');
-      var lastWhitespaceIndex =
-          enterIndex > spaceIndex ? enterIndex : spaceIndex;
-      if (lastWhitespaceIndex >= 0) {
-        contextWord.addAll(displayedText.sublist(lastWhitespaceIndex + 1));
+      var startOfContext = -1;
+      for (var i = displayedText.length - 1; i >= 0; i--) {
+        if (!_trie.allAksaras.contains(displayedText[i]) ||
+            displayedText[i] == '\n' ||
+            displayedText[i] == ' ') {
+          startOfContext = i;
+          break;
+        }
+      }
+      if (startOfContext >= 0) {
+        contextWord.addAll(displayedText.sublist(startOfContext + 1));
       } else {
         contextWord.addAll(displayedText);
       }
     }
+    fillKeyboard();
+  }
+
+  // Takes new text input and separates it into aksaras/emojis/non-aksaras in
+  // order to appropriately add it to the context and text.
+  int addNewText(String text, int cursorIndex) {
+    var parser = EmojiParser();
+    var newAksaras = <String>[];
+    var start = 0;
+    var end = text.length;
+    if (cursorIndex > 0) {
+      // Adding the last aksara before the cursor in case it can be combined
+      // with the beginning of the new text to form an aksara.
+      text = displayedText[cursorIndex - 1] + text;
+    }
+    // Continues until every character in the string has been processed.
+    while (start < text.length) {
+      // Tests possible combinations of aksaras, starting from the longest
+      // possible combination and reducing each time until a match is found.
+      while (end > start) {
+        // If there is only one character in the combination, the combination
+        // forms an aksaras, or the combination forms an emoji.
+        if (end - start == 1 ||
+            _trie.allAksaras.contains(text.substring(start, end)) ||
+            parser.getEmoji(text.substring(start, end)) != Emoji.None) {
+          var aksara = text.substring(start, end);
+          newAksaras.add(aksara);
+          start += aksara.length;
+        } else {
+          end--;
+        }
+      }
+      end = text.length;
+    }
+    // The new 'aksaras' are added to where the cursor previously was before
+    // the new changes.
+    displayedText = Aksaras(
+        displayedText.sublist(0, cursorIndex - (cursorIndex > 0 ? 1 : 0)) +
+            newAksaras +
+            displayedText.sublist(cursorIndex));
+    cursorIndex = displayedText.sublist(0, cursorIndex).join().length +
+        newAksaras.join().length;
+    // The context is updated using the new displayed text.
+    setContextWord();
+    return cursorIndex;
   }
 }

@@ -17,7 +17,7 @@ limitations under the License.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart';
 import 'package:bubble/bubble.dart';
 import 'package:trie_constructor/aksaras.dart';
 
@@ -53,36 +53,54 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   DynamicKeyboard keyboard;
 
-  String language = 'deva';
+  String language = 'hi';
 
-  String keyboardType = 'aksara';
+  // The static buttons at the bottom of the keyboard, e.g. spacebar.
+  Widget staticKeys;
 
   // Used to check if the processing of the data file has been completed.
   bool doneLoading = false;
 
-  // The size of the text displayed and the text on the buttons.
+  // The size of the text displayed on the buttons.
   double fontSize = 20.0;
-
-  Widget staticKeys;
 
   static const maxFontSize = 24.0;
 
-  int maxNumOfPredictions = 80;
+  // The approximate number of lines of predictions displayed on the screen.
+  int numOfLines = 10;
 
-  // The number of predictions displayed when the app starts up.
-  int numOfPredictions = 60;
+  int maxNumOfLines = 15;
 
-  final _predictionController = TextEditingController(text: '60');
+  // The approximate number of aksaras that appear on each line of the screen.
+  int aksarasPerLine = 16;
+
+  // Used to check if the aksara keyboard is currently expanded and visible.
+  bool keyboardIsExpanded = true;
+
+  // Stores previously loaded keyboards to avoid long loading times.
+  Map<String, DynamicKeyboard> storedKeyboards = {};
+
+  // Checks if the most recent input to the text field was from the aksara
+  // keyboard or some external source (gboard, pasted text, etc.).
+  bool isAksaraKeyboardInput = false;
+
+  // Keeps a record of what the current text displayed on the screen is.
+  String currentText = '';
+
+  // Controls how long the key predictions are.
+  double pValue = -5;
+
+  double cValue = 16;
+
+  final _linesController = TextEditingController(text: '10');
 
   final _textDisplayController = TextEditingController(text: '');
 
   final _fontController = TextEditingController(text: '20.0');
 
-  // Used to check if the keyboard is currently expanded and visible.
-  bool keyboardIsExpanded = true;
+  final _pValueController = TextEditingController(text: '-5');
 
-  // Stores previously loaded keyboards to avoid loading times.
-  Map<String, DynamicKeyboard> storedKeyboards = {};
+  final _cValueController = TextEditingController(text: '16');
 
   // This initialises the keyboard with 60 predictions.
   @override
@@ -90,199 +108,261 @@ class _MyHomePageState extends State<MyHomePage> {
     super.initState();
     addGoogleLicense();
     initialiseKeyboard();
+    _textDisplayController.addListener(() {
+      handleNewInput();
+    });
   }
 
-  // If the current language's keyboard has already been created, it
-  // is loaded from the map to be used. Otherwise, a new keyboard is created
-  // using the binary proto files in /assets.
+  // A keyboard is created using the binary proto files in /assets. If the
+  // keyboard for the current language has already been created, it is reloaded
+  // from a map rather than created again.
   void initialiseKeyboard() async {
-    // Depending on the language, the max number of predictions is different
-    // due to the scripts taking up different amounts of room on the screen.
-    setMaxNumOfPredictions();
+    // Depending on the language and font size, the max number of predictions
+    // will be different.
+    setMaxPredictions();
     if (storedKeyboards[language] != null) {
-      setState(() {
-        keyboard = storedKeyboards[language];
-        keyboard.setNumOfPredictions(numOfPredictions);
-        keyboard.fillKeyboard();
-        staticKeys = loadStaticKeys();
-        doneLoading = true;
-      });
+      keyboard = storedKeyboards[language];
+      keyboard.reset(aksarasPerLine * numOfLines);
+      staticKeys = loadStaticKeys();
+      updateTextController(0);
+      doneLoading = true;
     } else {
       await rootBundle.load('assets/${language}_trie.bin').then((data) {
         setState(() {
+          setMaxPredictions();
           var protoBytes = data.buffer.asUint8List();
-          keyboard = DynamicKeyboard(protoBytes, numOfPredictions);
-          staticKeys = loadStaticKeys();
-          doneLoading = true;
+          keyboard = DynamicKeyboard(protoBytes, aksarasPerLine * numOfLines);
           storedKeyboards[language] = keyboard;
+          staticKeys = loadStaticKeys();
+          updateTextController(0);
+          doneLoading = true;
         });
       });
     }
   }
 
-  void setMaxNumOfPredictions() {
-    // The maximum number of predictions able to fit on the screen when the
-    // font size is at its maximum value. These maximum number values are
-    // taken from experiments using the Google Pixel.
-    if (language == 'mlym') {
-      maxNumOfPredictions = 30;
+  void setMaxPredictions() {
+    // The approx. number of aksaras able to fit on a line when the font size
+    // is at its maximum value. These maximum values are taken from experiments
+    // using the Google Pixel.
+    if (language == 'hi') {
+      aksarasPerLine = 15;
+      maxNumOfLines = 13;
+    } else if (language == 'ml') {
+      aksarasPerLine = 11;
+      maxNumOfLines = 12;
     } else {
-      maxNumOfPredictions = 50;
+      aksarasPerLine = 14;
+      maxNumOfLines = 12;
     }
-    // For each decrement  by 1 of the font size, there is room for approx.
-    // 10 more predictions to be displayed.
     var fontSizeDiff = maxFontSize - fontSize;
-    maxNumOfPredictions += (10 * fontSizeDiff).floor();
-    // If the previous number of predictions is too much for the screen with
-    // the current font size, a smaller set of predictions are generated.
-    if (numOfPredictions > maxNumOfPredictions) {
-      numOfPredictions = maxNumOfPredictions;
-      keyboard.setNumOfPredictions(numOfPredictions);
-      keyboard.fillKeyboard();
-      _predictionController.text = numOfPredictions.toString();
-    }
+    setState(() {
+      // For each decrement by 1 of the font size, there is room for approx.
+      // 0.25 more aksaras to be displayed on a line.
+      aksarasPerLine += (fontSizeDiff / 4).round();
+      // For each decrement by 1 of the font size, there is room for approx.
+      // 0.5 more lines to be displayed on the screen.
+      maxNumOfLines += (fontSizeDiff / 2).round();
+      numOfLines = maxNumOfLines;
+      _linesController.text = numOfLines.toString();
+    });
   }
 
+  // Manually updates the position of the text field's cursor.
   void updateTextController(int offset) {
-    var text = keyboard.displayedText.join();
     _textDisplayController.value = TextEditingValue(
-      text: text,
+      text: keyboard.displayedText.join(),
       selection: TextSelection(baseOffset: offset, extentOffset: offset),
     );
+    currentText = keyboard.displayedText.join();
+    isAksaraKeyboardInput = true;
   }
 
-  // Retrieves the index of the last aksara that appears befor where the
-  // cursor is places. In other words, how many aksaras come before the cursor.
-  int getLastAksaraIndex() {
-    var text = keyboard.displayedText;
-    var cursorIndex = _textDisplayController.selection.baseOffset;
+  // Retrieves the index of the last aksara that appears before the cursor.
+  // In other words, returns how many aksaras come before the cursor.
+  int getLastAksaraIndex({int cursorIndex}) {
+    if (cursorIndex == null) {
+      cursorIndex = _textDisplayController.selection.baseOffset;
+    }
     if (cursorIndex <= 0) {
       return 0;
-    }
-    var currentLength = 0;
-    for (var i = 0; i < text.length; i++) {
-      currentLength += text[i].length;
-      if (cursorIndex <= currentLength) {
-        return i + 1;
+    } else {
+      var text = keyboard.displayedText;
+      var currentLength = 0;
+      for (var i = 0; i < text.length; i++) {
+        currentLength += text[i].length;
+        if (cursorIndex <= currentLength) {
+          return i + 1;
+        }
       }
+      return text.length;
     }
-    return 0;
+  }
+
+  // We update the aksara keyboard's text and context if the input has come
+  // from an external source (pasted text, etc.) and either (1) The keyboard
+  // has been switched from non-aksaras to aksaras or (2) the cursor has been
+  // manually moved.
+  dynamic handleNewInput() {
+    var shownText = _textDisplayController.text;
+    // If shownText is equal to currentText this means that no changes have
+    // been made but the cursor has been moved.
+    if (!isAksaraKeyboardInput &&
+        (keyboardIsExpanded || (shownText == currentText))) {
+      var keyboardText = keyboard.displayedText.join();
+      // If any changes have been made.
+      if (shownText != keyboardText) {
+        int index = 0;
+        // Finds where the keyboard's text and the text currently shown differ.
+        while (index < keyboardText.length &&
+            index < shownText.length &&
+            shownText[index] == keyboardText[index]) {
+          index++;
+        }
+        // Finds all of the aksaras the keyboard and shown text both begin with.
+        var cursorIndex = getLastAksaraIndex(cursorIndex: index);
+        int diff = shownText.length - keyboardText.length;
+        var unchangedText = keyboard.displayedText.sublist(0, cursorIndex);
+        if (diff >= 0) {
+          var newText = shownText.substring(index);
+          keyboard.displayedText = Aksaras(unchangedText);
+          setState(() {
+            var offset = keyboard.addNewText(newText, cursorIndex);
+            updateTextController(offset - 1);
+          });
+        } else {
+          // If the diff is negative this means aksaras/letters have been cut
+          // from the text.
+          var afterCut = (cursorIndex - diff) <= keyboard.displayedText.length
+              ? keyboard.displayedText.sublist(cursorIndex - diff)
+              : [];
+          setState(() {
+            keyboard.displayedText = Aksaras(unchangedText + afterCut);
+          });
+        }
+      }
+    } else {
+      isAksaraKeyboardInput = false;
+    }
+    currentText = shownText;
   }
 
   @override
   void dispose() {
-    _predictionController.dispose();
+    _linesController.dispose();
     _textDisplayController.dispose();
     _fontController.dispose();
+    _pValueController.dispose();
     super.dispose();
   }
 
-  // This method is rerun every time setState is called.
+  // This method is run each time setState is called.
   @override
   Widget build(BuildContext context) {
-    if (!doneLoading) {
-      return Center(child: CircularProgressIndicator());
+    if (keyboardIsExpanded) {
+      SystemChannels.textInput.invokeMethod('TextInput.hide');
+    } else {
+      SystemChannels.textInput.invokeMethod('TextInput.show');
     }
-    // Position on screen at beginning of scroll/swipe gesture.
-    var startPosition;
-    // Position on screen at end of scroll/swipe gesture.
-    var endPosition;
-
+    if (!doneLoading) {
+      return Center(
+          child: Text(
+        'Loading...',
+        style: TextStyle(color: Colors.white),
+      ));
+    }
+    // This decides whether the phone's in-build keyboard is displayed or not.
     return Scaffold(
-        resizeToAvoidBottomPadding: false,
-        body: Column(children: <Widget>[
-          Expanded(
-              // The text displayed using the users input.
-              child: Stack(
-            children: <Widget>[
-              Align(
-                  alignment: Alignment.topLeft,
-                  child: Container(
-                      padding: EdgeInsets.only(top: 30),
-                      child: SingleChildScrollView(
-                        child: TextField(
-                            keyboardType: TextInputType.multiline,
-                            maxLines: null,
-                            readOnly: true,
-                            showCursor: true,
-                            controller: _textDisplayController,
-                            style: TextStyle(
-                                fontSize: fontSize,
-                                backgroundColor: Colors.white)),
-                      ))),
-              Align(
-                  alignment: Alignment.bottomRight,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    mainAxisSize: MainAxisSize.max,
-                    children: <Widget>[
-                      // Displays the app settings in a popup.
-                      RaisedButton(
+      // This makes sure there is no overflow when an in-built keyboard is
+      // displayed, i.e. the keyboard appears on top of the already existing
+      // widgets, rather than pushing them upwards on the screen.
+      resizeToAvoidBottomInset: false,
+      body: Column(children: <Widget>[
+        Expanded(
+            child: Stack(
+          children: <Widget>[
+            Align(
+              alignment: Alignment.topLeft,
+              child: SafeArea(
+                child: SingleChildScrollView(
+                  // The text displaying what the user has input.
+                  child: TextField(
+                      onTap: () {
+                        // Makes sure that, when the focus is put on the
+                        // TextField, the in-build keyboard is only displayed
+                        // when it is supposed to be.
+                        if (keyboardIsExpanded) {
+                          SystemChannels.textInput
+                              .invokeMethod('TextInput.hide');
+                        } else {
+                          SystemChannels.textInput
+                              .invokeMethod('TextInput.show');
+                        }
+                      },
+                      decoration: null,
+                      autofocus: true,
+                      keyboardType: TextInputType.multiline,
+                      maxLines: (maxNumOfLines - numOfLines) + 3,
+                      showCursor: true,
+                      controller: _textDisplayController,
+                      style: TextStyle(
+                          fontSize: 26, backgroundColor: Colors.white)),
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.bottomRight,
+              child: Container(
+                padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(context).viewInsets.bottom),
+                child: keyboardIsExpanded
+                    ? SizedBox.shrink()
+                    : RaisedButton(
                         color: Colors.transparent,
                         shape: CircleBorder(),
-                        onPressed: () {
-                          showSettingsMenu();
-                        },
-                        child: Icon(Icons.settings),
-                      ),
-                      // Allows the user to expand/collapse the keyboard.
-                      RaisedButton(
-                        color: Colors.transparent,
-                        shape: CircleBorder(),
+                        // Allows the user to switch between the aksara keyboard and
+                        // the phone's in-built keyboard.
                         onPressed: () {
                           setState(() {
                             keyboardIsExpanded = !keyboardIsExpanded;
+                            if (keyboardIsExpanded) {
+                              handleNewInput();
+                            }
+                          });
+                        },
+                        // Displays the app settings in a popup.
+                        onLongPress: () {
+                          setState(() {
+                            keyboardIsExpanded = false;
+                            showSettingsMenu();
                           });
                         },
                         child: Icon(Icons.keyboard),
                       ),
-                    ],
-                  )),
-            ],
-          )),
-          // The keyboard, displays the most likely predictions of lengths 1-4.
-          keyboardIsExpanded
-              ? Column(
-                  key: GlobalKey(),
-                  children: <Widget>[
-                    GestureDetector(
-                        onVerticalDragStart: (details) {
-                          startPosition = details.globalPosition;
-                        },
-                        onVerticalDragUpdate: (details) {
-                          endPosition = details.globalPosition;
-                        },
-                        onVerticalDragEnd: (details) {
-                          if (endPosition != null) {
-                            setState(() {
-                              if (startPosition.dy > endPosition.dy + 5) {
-                                keyboardType = 'characters';
-                              } else if (startPosition.dy <
-                                  endPosition.dy - 5) {
-                                keyboardType = 'aksara';
-                              }
-                            });
-                          }
-                        },
-                        child: Container(
-                            color: Colors.grey[200],
-                            child: Column(
-                              children: <Widget>[
-                                keyboardType == 'aksara'
-                                    ? loadPredictions()
-                                    : loadCharacters(),
-                              ],
-                            ))),
-                    Container(
-                        height: 40,
-                        padding: const EdgeInsets.only(
-                            left: 4, right: 4, top: 2, bottom: 2),
-                        color: Colors.grey[200],
-                        child: staticKeys)
-                  ],
-                )
-              : SizedBox.shrink(),
-        ]));
+              ),
+            ),
+          ],
+        )),
+        // The keyboard, displays the most likely predictions of lengths 1-4.
+        keyboardIsExpanded
+            ? Column(
+                key: GlobalKey(),
+                children: <Widget>[
+                  Container(
+                    color: Colors.grey[200],
+                    child: loadPredictions(),
+                  ),
+                  Container(
+                      height: 40,
+                      padding: const EdgeInsets.only(
+                          left: 4, right: 4, top: 2, bottom: 2),
+                      color: Colors.grey[200],
+                      child: staticKeys)
+                ],
+              )
+            : SizedBox.shrink(),
+      ]),
+    );
   }
 
 // A popup dialog containing app info and settings for font size, language, etc.
@@ -300,6 +380,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: InkResponse(
                     onTap: () {
                       Navigator.of(context).pop();
+                      keyboardIsExpanded = true;
                     },
                     child: CircleAvatar(
                       child: Icon(Icons.close),
@@ -312,30 +393,67 @@ class _MyHomePageState extends State<MyHomePage> {
                     children: <Widget>[
                       Center(
                         child: Text(
-                          '# Predictions',
+                          'Language:',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                      ),
+                      ButtonTheme(
+                        alignedDropdown: true,
+                        child: DropdownButton<String>(
+                          value: language,
+                          icon: Icon(Icons.arrow_downward),
+                          iconSize: 14,
+                          style: TextStyle(fontSize: 14, color: Colors.black),
+                          underline: Container(
+                            height: 2,
+                            color: Colors.black,
+                          ),
+                          onChanged: (String newValue) {
+                            setState(() {
+                              if (newValue != language) {
+                                language = newValue;
+                                doneLoading = false;
+                                initialiseKeyboard();
+                                Navigator.of(context).pop();
+                              }
+                            });
+                          },
+                          items: <String>['hi', 'ml', 'bn', 'te']
+                              .map<DropdownMenuItem<String>>((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(value),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      Center(
+                        child: Text(
+                          '# Lines',
                           style: TextStyle(fontSize: 14),
                         ),
                       ),
 
-                      // Option to choose the number of predictions displayed.
+                      // Option to choose the number of lines of predictions
+                      // that are displayed.
                       TextField(
                         autofocus: false,
                         keyboardType: TextInputType.number,
-                        controller: _predictionController,
+                        controller: _linesController,
                         onEditingComplete: () {
-                          numOfPredictions =
-                              int.parse(_predictionController.text);
-                          if (numOfPredictions > maxNumOfPredictions) {
-                            numOfPredictions = maxNumOfPredictions;
-                          } else if (numOfPredictions < 1) {
-                            numOfPredictions = 1;
+                          numOfLines = int.parse(_linesController.text);
+                          if (numOfLines > maxNumOfLines) {
+                            numOfLines = maxNumOfLines;
+                          } else if (numOfLines < 1) {
+                            numOfLines = 1;
                           }
                           setState(() {
-                            _predictionController.text =
-                                numOfPredictions.toString();
+                            _linesController.text = numOfLines.toString();
                             FocusScope.of(context).unfocus();
-                            keyboard.setNumOfPredictions(numOfPredictions);
+                            keyboard
+                                .setNumOfAksaras(aksarasPerLine * numOfLines);
                             keyboard.fillKeyboard();
+                            Navigator.of(context).pop();
                           });
                         },
                       ),
@@ -360,38 +478,59 @@ class _MyHomePageState extends State<MyHomePage> {
                             _fontController.text = sizeInput.toString();
                             FocusScope.of(context).unfocus();
                             fontSize = sizeInput;
-                            setMaxNumOfPredictions();
+                            setMaxPredictions();
+                            keyboard
+                                .setNumOfAksaras(aksarasPerLine * numOfLines);
+                            keyboard.fillKeyboard();
+                            Navigator.of(context).pop();
                           });
                         },
                       ),
-                      ButtonTheme(
-                        alignedDropdown: true,
-                        child: DropdownButton<String>(
-                          value: language,
-                          icon: Icon(Icons.arrow_downward),
-                          iconSize: 14,
-                          style: TextStyle(fontSize: 14, color: Colors.black),
-                          underline: Container(
-                            height: 2,
-                            color: Colors.black,
-                          ),
-                          onChanged: (String newValue) {
-                            setState(() {
-                              if (newValue != language) {
-                                language = newValue;
-                                doneLoading = false;
-                                initialiseKeyboard();
-                              }
-                            });
-                          },
-                          items: <String>['deva', 'mlym']
-                              .map<DropdownMenuItem<String>>((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            );
-                          }).toList(),
+                      Center(
+                        child: Text(
+                          'Prediction Length Factor',
+                          style: TextStyle(fontSize: 14),
                         ),
+                      ),
+                      // Option to choose the predictionFactor value (how long
+                      // key predictions are in general)
+                      TextField(
+                        autofocus: false,
+                        keyboardType: TextInputType.number,
+                        controller: _pValueController,
+                        onEditingComplete: () {
+                          pValue = double.parse(_pValueController.text);
+                          setState(() {
+                            FocusScope.of(context).unfocus();
+                            _pValueController.text = pValue.toString();
+                            keyboard.setPValue(pValue);
+                            keyboard.fillKeyboard();
+                            Navigator.of(context).pop();
+                          });
+                        },
+                      ),
+                      Center(
+                        child: Text(
+                          'Context Factor',
+                          style: TextStyle(fontSize: 14),
+                        ),
+                      ),
+                      // Option to choose the contextFactor value (how important
+                      // the context is for predictions)
+                      TextField(
+                        autofocus: false,
+                        keyboardType: TextInputType.number,
+                        controller: _cValueController,
+                        onEditingComplete: () {
+                          cValue = double.parse(_cValueController.text);
+                          setState(() {
+                            FocusScope.of(context).unfocus();
+                            _cValueController.text = cValue.toString();
+                            keyboard.setCValue(cValue);
+                            keyboard.fillKeyboard();
+                            Navigator.of(context).pop();
+                          });
+                        },
                       ),
                       RaisedButton(
                           color: Colors.blue,
@@ -435,43 +574,9 @@ class _MyHomePageState extends State<MyHomePage> {
                       .sublist(0, end + keys[i].length)
                       .join()
                       .length);
-                  keyboard.fillKeyboard();
                 });
               },
               child: Text(keys[i].join(),
-                  style: TextStyle(fontSize: fontSize, color: Colors.black))),
-        ),
-      );
-    }
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      spacing: 0,
-      runSpacing: 2,
-      children: bubbles,
-    );
-  }
-
-  // Displays possible single characters given the context.
-  Widget loadCharacters() {
-    var bubbles = <Bubble>[];
-    var characters = keyboard.charPredictions;
-    for (var i = 0; i < characters.length; i++) {
-      bubbles.add(
-        Bubble(
-          color: Colors.grey[400],
-          padding: BubbleEdges.only(top: 1, bottom: 1, right: 3, left: 3),
-          child: InkResponse(
-              onTap: () {
-                setState(() {
-                  var end = getLastAksaraIndex();
-                  keyboard.combineCharWithContext(characters[i], end);
-                  updateTextController(
-                      keyboard.displayedText.sublist(0, end + 1).join().length);
-                  keyboard.fillKeyboard();
-                  keyboardType = 'aksara';
-                });
-              },
-              child: Text(characters[i],
                   style: TextStyle(fontSize: fontSize, color: Colors.black))),
         ),
       );
@@ -495,12 +600,11 @@ class _MyHomePageState extends State<MyHomePage> {
               padding: const EdgeInsets.all(1),
               color: const Color(0xffb7b7b7),
               onPressed: () {
-                setState(() {
-                  keyboardType = 'characters';
-                });
+                Clipboard.setData(
+                    new ClipboardData(text: keyboard.displayedText.join()));
               },
               child: Icon(
-                Icons.arrow_downward,
+                Icons.content_copy,
                 size: 16,
               ),
             )),
@@ -511,38 +615,22 @@ class _MyHomePageState extends State<MyHomePage> {
               color: const Color(0xffb7b7b7),
               onPressed: () {
                 setState(() {
-                  keyboardType = 'aksara';
+                  keyboardIsExpanded = !keyboardIsExpanded;
+                  if (keyboardIsExpanded) {
+                    handleNewInput();
+                  }
                 });
               },
-              child: Icon(
-                Icons.arrow_upward,
-                size: 16,
-              ),
+              onLongPress: () {
+                setState(() {
+                  keyboardIsExpanded = false;
+                  showSettingsMenu();
+                });
+              },
+              child: Icon(Icons.keyboard),
             )),
         Expanded(
-            flex: 1,
-            child: RaisedButton(
-              padding: const EdgeInsets.all(1),
-              color: const Color(0xffb7b7b7),
-              onPressed: () {},
-              child: Icon(
-                Icons.format_quote,
-                size: 16,
-              ),
-            )),
-        Expanded(
-            flex: 1,
-            child: RaisedButton(
-              padding: const EdgeInsets.all(1),
-              color: const Color(0xffb7b7b7),
-              onPressed: () {},
-              child: Icon(
-                Icons.insert_emoticon,
-                size: 16,
-              ),
-            )),
-        Expanded(
-            flex: 5,
+            flex: 3,
             child: RaisedButton(
               padding: const EdgeInsets.all(1),
               color: const Color(0xffd9d9d9),
@@ -552,7 +640,6 @@ class _MyHomePageState extends State<MyHomePage> {
                   keyboard.processNewInput(Aksaras([' ']), end);
                   updateTextController(
                       keyboard.displayedText.sublist(0, end + 1).join().length);
-                  keyboard.fillKeyboard();
                 });
               },
               child: Text(
@@ -561,7 +648,7 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
             )),
         Expanded(
-            flex: 2,
+            flex: 1,
             child: RaisedButton(
               padding: const EdgeInsets.all(1),
               color: const Color(0xffb7b7b7),
@@ -570,13 +657,12 @@ class _MyHomePageState extends State<MyHomePage> {
                   var end = getLastAksaraIndex();
                   keyboard.processNewInput(Aksaras(['←']), end);
                   var newEnd = end <= 1
-                      ? end
+                      ? end - 1
                       : keyboard.displayedText
                           .sublist(0, end - 1)
                           .join()
                           .length;
                   updateTextController(newEnd);
-                  keyboard.fillKeyboard();
                 });
               },
               child: Icon(
@@ -585,16 +671,17 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
             )),
         Expanded(
-            flex: 2,
+            flex: 1,
             child: RaisedButton(
               padding: const EdgeInsets.all(1),
               color: const Color(0xffb7b7b7),
               onPressed: () {
-                var end = getLastAksaraIndex();
-                keyboard.processNewInput(Aksaras(['\n']), end);
-                updateTextController(
-                    keyboard.displayedText.sublist(0, end + 1).join().length);
-                keyboard.fillKeyboard();
+                setState(() {
+                  var end = getLastAksaraIndex();
+                  keyboard.processNewInput(Aksaras(['\n']), end);
+                  updateTextController(
+                      keyboard.displayedText.sublist(0, end + 1).join().length);
+                });
               },
               child: Icon(
                 Icons.keyboard_return,

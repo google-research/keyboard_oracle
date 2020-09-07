@@ -6,8 +6,10 @@ A dynamic grid made up of buttons which functions as a keyboard. This keyboard c
 dynamically depending on the input to display the most likely aksaras (grapheme clusters)
 to come next. The keyboard displays predictions of lengths 1-4.
 
-![Malayalam initial keyboard](images/mlym_initial.png)
-![Malayalam keyboard after user input](images/mlym_with_input.png)
+![Hindi initial keyboard](images/hi_initial.png)
+![Hindi keyboard after user input](images/hi_menu.png)
+
+All example word-frequency lists have been retrieved from the [Dakshina data set](https://github.com/google-research-datasets/dakshina).
 
 ## Setting up Flutter and Dart:
 Install Flutter: Instructions are here: https://flutter.dev/docs/get-started/install
@@ -69,9 +71,9 @@ Instructions can be found here for Android: https://flutter.dev/docs/get-started
 7. To run the app, select an emulator/device and run Flutter main.
 
 ## Using the Dart package to construct a new trie
-1. Go to terminal, navigate to *trie_constructor/bin* and enter `dart trie_constructor.dart`. This constructs a trie from the default text file (*deva_examples.txt*) and stores it in *deva_trie.bin* .
-2. If you would like to change the input text file to a different text file, enter `dart trie_constructor.dart --inputFile=[filepath]`. For example: `dart trie_constructor.dart --inputFile=mlym_examples.txt` .
+1. Go to terminal, navigate to *trie_constructor/bin* and enter `dart trie_constructor.dart`. This constructs a trie from the default text file (*hi_examples.txt*) and stores it in *hi_trie.bin* .
+2. If you would like to change the input text file to a different text file, enter `dart trie_constructor.dart --inputFile=[filepath]`. For example: `dart trie_constructor.dart --inputFile=ml_examples.txt` .
 3. If you would like to change the output binary file location, enter `dart trie_constructor.dart --outputFile=[file path]` .
 4. For input files, the script needs text files containing words where each word is separated by aksara and followed by its frequency in the form of: *[Aksara1][space symbol][Aksara2][space symbol][Aksara3][tab symbol][frequency no.]* .
-5. If you would like to run tests on your language model, use the command line flag *isTest*. E.g. `dart trie_constructor.dart --isTest` . The results will be printed to your console.
+5. If you would like to run performance tests on your language model, use the command line flag *isTest*. E.g. `dart trie_constructor.dart --isTest` . The results will be printed to your console.
 6. You can now copy the generated bin file from *trie_constructor/bin* and paste them into the *assets* folder in your flutter app to use.
