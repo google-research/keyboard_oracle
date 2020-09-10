@@ -42,8 +42,7 @@ void testTriePerformance(List<WordInfo> sourceWords, bool testClicks,
   print('Perplexity on test data: $perplexity');
 
   if (testClicks) {
-    var clicksPerAksara = calculateClicksPerAksara(trie, testWords);
-    print('$clicksPerAksara clicks per aksara');
+    calculateClicksPerAksara(trie, testWords);
   }
 }
 
@@ -144,12 +143,16 @@ double calculateKeyboardAccuracy(SuffixTrie trie, List<WordInfo> words) {
 // Calculates the minimum number of keyboard clicks (key presses) needed to
 // input every aksara in the test set and divides it by the number of aksaras.
 // In this way, the average number of clicks needed to input an aksara is
-// calculated.
-double calculateClicksPerAksara(SuffixTrie trie, List<WordInfo> words) {
+// calculated. The average number of clicks needed to input a character is also
+// calculated by keeping count of the number of characters in each aksara and
+// dividing this total by the number of keyboard clicks
+void calculateClicksPerAksara(SuffixTrie trie, List<WordInfo> words) {
   var totalClicks = 0;
   var totalAksaras = 0;
+  var totalCharacters = 0;
   for (var word in words) {
     totalAksaras += word.aksaras.length - 1;
+    totalCharacters += word.aksaras.join().length - 1;
     var context = Aksaras(['@']);
     var predictions = <Aksaras>[];
     for (var i = 1; i < word.aksaras.length;) {
@@ -180,5 +183,6 @@ double calculateClicksPerAksara(SuffixTrie trie, List<WordInfo> words) {
       }
     }
   }
-  return totalClicks / totalAksaras;
+  print('${totalClicks / totalCharacters} clicks per character');
+  print('${totalClicks / totalAksaras} clicks per aksara');
 }

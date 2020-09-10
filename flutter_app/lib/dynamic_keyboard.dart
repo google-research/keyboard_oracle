@@ -58,17 +58,17 @@ class DynamicKeyboard {
     }
   }
 
-  void setPValue(double pValue) {
-    if (_trie.predictionFactor != pValue) {
-      _trie.predictionFactor = pValue;
+  void setPredictionWeight(double pWeight) {
+    if (_trie.predictionWeight != pWeight) {
+      _trie.predictionWeight = pWeight;
       _trie.cachedPredictions.clear();
       _cachedKeys.clear();
     }
   }
 
-  void setCValue(double cValue) {
-    if (_trie.contextFactor != cValue) {
-      _trie.contextFactor = cValue;
+  void setContextWeight(double cWeight) {
+    if (_trie.contextWeight != cWeight) {
+      _trie.contextWeight = cWeight;
       _trie.cachedPredictions.clear();
       _cachedKeys.clear();
     }

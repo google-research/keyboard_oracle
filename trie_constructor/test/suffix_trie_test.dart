@@ -33,7 +33,7 @@ void main() {
   // Setting the factor that changes frequencies/predictions based on prediction
   // length to 0 so that it has no effect on the predictions, which results in
   // more predictable results for the test.
-  trie.predictionFactor = 0;
+  trie.predictionWeight = 0;
   getMostLikelyPredictionsTest(trie);
   findPredictionsTest(trie);
   findAllPredictionsTest(trie);
@@ -84,11 +84,11 @@ void findPredictionsTest(SuffixTrie trie) {
       'Testing findPredictions results for context = ["@"] and prediction'
       'length = 1', () {
     var expected =
-        (3 * pow(2, trie.contextFactor) * pow(1, trie.predictionFactor))
+        (3 * pow(2, trie.contextWeight) * pow(1, trie.predictionWeight))
             .round();
     var result = results.firstWhere((element) => element.aksaras.join() == 'a');
     expect(result.frequency, equals(expected));
-    expected = (4 * pow(2, trie.contextFactor) * pow(1, trie.predictionFactor))
+    expected = (4 * pow(2, trie.contextWeight) * pow(1, trie.predictionWeight))
         .round();
     result = results.firstWhere((element) => element.aksaras.join() == 'e');
     expect(result.frequency, equals(expected));

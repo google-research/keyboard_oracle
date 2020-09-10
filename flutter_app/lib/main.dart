@@ -88,9 +88,9 @@ class _MyHomePageState extends State<MyHomePage> {
   String currentText = '';
 
   // Controls how long the key predictions are.
-  double pValue = -5;
+  double pWeight = -5;
 
-  double cValue = 16;
+  double cWeight = 16;
 
   final _linesController = TextEditingController(text: '10');
 
@@ -98,9 +98,9 @@ class _MyHomePageState extends State<MyHomePage> {
 
   final _fontController = TextEditingController(text: '20.0');
 
-  final _pValueController = TextEditingController(text: '-5');
+  final _pWeightController = TextEditingController(text: '-5');
 
-  final _cValueController = TextEditingController(text: '16');
+  final _cWeightController = TextEditingController(text: '16');
 
   // This initialises the keyboard with 60 predictions.
   @override
@@ -252,7 +252,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _linesController.dispose();
     _textDisplayController.dispose();
     _fontController.dispose();
-    _pValueController.dispose();
+    _pWeightController.dispose();
     super.dispose();
   }
 
@@ -372,7 +372,7 @@ class _MyHomePageState extends State<MyHomePage> {
         builder: (BuildContext context) {
           return AlertDialog(
             content: Stack(
-              overflow: Overflow.visible,
+              clipBehavior: Clip.none,
               children: <Widget>[
                 Positioned(
                   right: -45.0,
@@ -488,22 +488,22 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                       Center(
                         child: Text(
-                          'Prediction Length Factor',
+                          'Prediction Length Weight',
                           style: TextStyle(fontSize: 14),
                         ),
                       ),
-                      // Option to choose the predictionFactor value (how long
+                      // Option to choose the predictionWeight value (how long
                       // key predictions are in general)
                       TextField(
                         autofocus: false,
                         keyboardType: TextInputType.number,
-                        controller: _pValueController,
+                        controller: _pWeightController,
                         onEditingComplete: () {
-                          pValue = double.parse(_pValueController.text);
+                          pWeight = double.parse(_pWeightController.text);
                           setState(() {
                             FocusScope.of(context).unfocus();
-                            _pValueController.text = pValue.toString();
-                            keyboard.setPValue(pValue);
+                            _pWeightController.text = pWeight.toString();
+                            keyboard.setPredictionWeight(pWeight);
                             keyboard.fillKeyboard();
                             Navigator.of(context).pop();
                           });
@@ -511,22 +511,22 @@ class _MyHomePageState extends State<MyHomePage> {
                       ),
                       Center(
                         child: Text(
-                          'Context Factor',
+                          'Context Weight',
                           style: TextStyle(fontSize: 14),
                         ),
                       ),
-                      // Option to choose the contextFactor value (how important
+                      // Option to choose the contextWeight value (how important
                       // the context is for predictions)
                       TextField(
                         autofocus: false,
                         keyboardType: TextInputType.number,
-                        controller: _cValueController,
+                        controller: _cWeightController,
                         onEditingComplete: () {
-                          cValue = double.parse(_cValueController.text);
+                          cWeight = double.parse(_cWeightController.text);
                           setState(() {
                             FocusScope.of(context).unfocus();
-                            _cValueController.text = cValue.toString();
-                            keyboard.setCValue(cValue);
+                            _cWeightController.text = cWeight.toString();
+                            keyboard.setContextWeight(cWeight);
                             keyboard.fillKeyboard();
                             Navigator.of(context).pop();
                           });

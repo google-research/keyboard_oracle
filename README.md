@@ -2,12 +2,12 @@
 
 A dynamic keyboard made using [Flutter](https://flutter.dev/).
 
-A dynamic grid made up of buttons which functions as a keyboard. This keyboard changes
-dynamically depending on the input to display the most likely aksaras (grapheme clusters)
+An input tool made up of buttons which functions as a keyboard. This keyboard changes
+dynamically depending on the input to display the most likely sub-aksaras (graphemes)
 to come next. The keyboard displays predictions of lengths 1-4.
 
-![Hindi initial keyboard](images/hi_initial.png)
-![Hindi keyboard after user input](images/hi_menu.png)
+![Hindi initial keyboard](images/ml_initial.png)
+![Hindi keyboard after user input](images/ml_settings.png)
 
 All example word-frequency lists have been retrieved from the [Dakshina data set](https://github.com/google-research-datasets/dakshina).
 

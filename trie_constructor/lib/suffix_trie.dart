@@ -57,11 +57,11 @@ class SuffixTrie {
 
   // A constant used to modify the prediction frequency based on the length
   // of the context that it follows.
-  double contextFactor = 16;
+  double contextWeight = 16;
 
   // A constant used to modify the prediction frequency based on the number of
   // aksaras in the prediction.
-  double predictionFactor = -5;
+  double predictionWeight = -5;
 
   static const numPredictionLengths = 4;
 
@@ -387,8 +387,8 @@ class SuffixTrie {
   WordInfo getModifiedPrediction(
       WordInfo prediction, int contextLength, int predictionLength) {
     var newFrequency = (prediction.frequency *
-            pow(contextLength + 1, contextFactor) *
-            pow(predictionLength, predictionFactor))
+            pow(contextLength + 1, contextWeight) *
+            pow(predictionLength, predictionWeight))
         .round();
     return WordInfo(prediction.aksaras, newFrequency);
   }
