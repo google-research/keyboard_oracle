@@ -74,7 +74,7 @@ class _MyHomePageState extends State<MyHomePage> {
   // The approximate number of aksaras that appear on each line of the screen.
   int aksarasPerLine = 16;
 
-  // Used to check if the aksara keyboard is currently expanded and visible.
+  // Used to check if the sub-aksara keyboard is currently expanded and visible.
   bool keyboardIsExpanded = true;
 
   // Stores previously loaded keyboards to avoid long loading times.
