@@ -75,5 +75,6 @@ Instructions can be found here for Android: https://flutter.dev/docs/get-started
 2. If you would like to change the input text file to a different text file, enter `dart trie_constructor.dart --inputFile=[filepath]`. For example: `dart trie_constructor.dart --inputFile=ml_examples.txt` .
 3. If you would like to change the output binary file location, enter `dart trie_constructor.dart --outputFile=[file path]` .
 4. For input files, the script needs text files containing words where each word is separated by aksara and followed by its frequency in the form of: *[Aksara1][space symbol][Aksara2][space symbol][Aksara3][tab symbol][frequency no.]* .
-5. If you would like to run performance tests on your language model, use the command line flag *isTest*. E.g. `dart trie_constructor.dart --isTest` . The results will be printed to your console.
-6. You can now copy the generated bin file from *trie_constructor/bin* and paste them into the *assets* folder in your flutter app to use.
+5. If you would like to run performance tests on your language model, use the command line flag *isTest*. E.g. `dart trie_constructor.dart --isTest`. The results will be printed to your console.
+6. If you would like to run general tests on the suffix trie, you can run `pub run test test/`.
+7. You can now copy the generated bin file from *trie_constructor/bin* and paste them into the *assets* folder in your flutter app to use.
