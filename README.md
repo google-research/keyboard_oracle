@@ -49,8 +49,7 @@ Instructions can be found here for Android: https://flutter.dev/docs/get-started
 1. Go to *View > Command Palette* in VS Code and choose *Dart: New Project*.
 2. Select *Console Application* (console-full) and name your project trie_constructor.
 3. Take note of where you store the project directory.
-4. Overwrite *lib* and *bin* with the *lib* and *bin* files in *trie_constructor* directory in this repository.
-5. Make sure your *pubspec.yaml* contains the same dependencies as the *pubspec.yaml* file in *trie_constructor* directory in this repository.
+4. Overwrite *lib*, *bin*, and *pubspec.yaml* with the *lib*, *bin*, and *pubspec.yaml* files in *trie_constructor* directory in this repository.
 6. Run `pub get` in your terminal.
 
 ## Setting up the Protocol Buffer compiler and Dart plugin
