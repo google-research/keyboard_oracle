@@ -31,12 +31,12 @@ dependencies.  On the other hand, the pure Dart package we use cannot be created
 in Android Studio.  Therefore, instructions for setting up both Android Studio
 and Visual Studio Code are given below.
 
-###### Android Studio:
+##### Android Studio:
 1. Download and install from here: https://developer.android.com/studio
 2. Start Android Studio and go through the *Android Studio Setup Wizard*.
 3. On the Android Studio homepage click *Configure* and then *Plugins* and search for Flutter.
 
-###### Visual Studio Code:
+##### Visual Studio Code:
 1. Install VS Code from here: https://code.visualstudio.com/
 2. Start VS Code and install the Dart and Flutter plugins by going to *View > Command Palette* (or Ctrl + Shift + P).
 3. Type *install*, and then select *Extensions: Install Extensions*.
